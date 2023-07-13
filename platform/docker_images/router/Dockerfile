@@ -29,5 +29,14 @@ EXPOSE 22
 COPY supervisord.conf /etc/supervisor/conf.d/processes.conf
 COPY looking_glass.sh /usr/local/bin/looking_glass
 COPY run_frr.sh /usr/local/bin/run_frr
+COPY load.py /load.py
+COPY sleep-script.py /sleep-script.py
+COPY read-traffic.py /read-traffic.py
 
+RUN apk add py3-pip
+RUN pip3 install networkx
 RUN chmod +x /usr/local/bin/looking_glass /usr/local/bin/run_frr
+RUN chmod +x /load.py
+RUN chmod +x /sleep-script.py
+RUN chmod +x /read-traffic.py
+

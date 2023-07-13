@@ -107,6 +107,9 @@ for ((k=0;k<group_numbers;k++));do
 
                 echo " -c 'router ospf' \\"
                 echo " -c 'ospf router-id "${router_id%/*}"' \\"
+		echo " -c 'ospf opaque-lsa' \\" # enable mpls-te
+		echo " -c 'mpls-te on' \\"
+		echo " -c 'mpls-te router-address "${router_id%/*}"' \\" #end
                 echo " -c 'network "$(subnet_router "${group_number}" "${i}")" area 0' \\"
                 echo " -c 'exit'\\"
                 echo " -c 'ip route "$(subnet_group "${group_number}")" null0' \\"
@@ -138,12 +141,29 @@ for ((k=0;k<group_numbers;k++));do
             row_i=(${intern_links[$i]})
             router1="${row_i[0]}"
             router2="${row_i[1]}"
+	    bandwidth="${row_i[2]}"
+	    echo "$((bandwidth*1000/8))"
+	    delay="${row_i[3]}"
             location1="${DIRECTORY}"/groups/g"${group_number}"/"${router1}"/init_full_conf.sh
             location2="${DIRECTORY}"/groups/g"${group_number}"/"${router2}"/init_full_conf.sh
             {
                 echo " -c 'interface port_"${router2}"' \\"
                 echo " -c 'ip address "$(subnet_router_router_intern "${group_number}" "${i}" 1)"' \\"
                 echo " -c 'ip ospf cost 1' \\"
+		echo " -c 'ip ospf network point-to-point' \\" # have point-to-point link
+		echo " -c 'link-params' \\" # more to enable mpls-te
+                echo " -c 'enable' \\"
+                echo " -c 'max-rsv-bw 0' \\"
+		echo " -c 'unrsv-bw 0 0' \\"
+		echo " -c 'unrsv-bw 1 0' \\"
+		echo " -c 'unrsv-bw 2 0' \\"
+		echo " -c 'unrsv-bw 3 0' \\"
+		echo " -c 'unrsv-bw 4 0' \\"
+		echo " -c 'unrsv-bw 5 0' \\"
+		echo " -c 'unrsv-bw 6 0' \\"
+		echo " -c 'unrsv-bw 7 0' \\"
+		echo " -c 'max-bw $((bandwidth*1000/8))' \\"
+                echo " -c 'exit' \\" # end
                 echo " -c 'exit' \\"
                 echo " -c 'router ospf' \\"
                 echo " -c 'network "$(subnet_router_router_intern "${group_number}" "${i}" 1)" area 0' \\"
@@ -153,6 +173,20 @@ for ((k=0;k<group_numbers;k++));do
                 echo " -c 'interface port_"${router1}"' \\"
                 echo " -c 'ip address "$(subnet_router_router_intern "${group_number}" "${i}" 2)"' \\"
                 echo " -c 'ip ospf cost 1' \\"
+		echo " -c 'ip ospf network point-to-point' \\" # have point-to-point link
+		echo " -c 'link-params' \\" # more to enable mpls-te
+                echo " -c 'enable' \\"
+		echo " -c 'max-rsv-bw 0' \\"
+                echo " -c 'unrsv-bw 0 0' \\"
+                echo " -c 'unrsv-bw 1 0' \\"
+                echo " -c 'unrsv-bw 2 0' \\"
+                echo " -c 'unrsv-bw 3 0' \\"
+                echo " -c 'unrsv-bw 4 0' \\"
+                echo " -c 'unrsv-bw 5 0' \\"
+                echo " -c 'unrsv-bw 6 0' \\"
+                echo " -c 'unrsv-bw 7 0' \\"
+		echo " -c 'max-bw $((bandwidth*1000/8))' \\"
+                echo " -c 'exit' \\" # end
                 echo " -c 'exit' \\"
                 echo " -c 'router ospf' \\"
                 echo " -c 'network "$(subnet_router_router_intern "${group_number}" "${i}" 2)" area 0' \\"

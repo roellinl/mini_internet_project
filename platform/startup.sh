@@ -230,8 +230,8 @@ time ./setup/mpls_setup.sh "${DIRECTORY}"
 echo ""
 echo ""
 
-echo "Waiting 60sec for RPKI CA and proxy to startup.."
-sleep 60
+echo "Waiting 5sec for RPKI CA and proxy to startup.."
+sleep 5
 
 echo "rpki_setup.sh $(($(date +%s%N)/1000000))" >> "${DIRECTORY}"/log.txt
 echo "rpki_setup.sh: "
