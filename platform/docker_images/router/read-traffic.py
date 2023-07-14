@@ -4,18 +4,13 @@ import time
 import socket
 
 sleep_edge = ["1.151.0.1","1.154.0.1"]
-
-for router in sleep_edge:
-    print(router)
-    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    s.connect((router, 2023))
-    s.sendall(f"wake all".encode())
-    s.close()
+last_sleep_edge_bw = {"ip": {"1.151.0.1": "1.0.3.1" ,"1.154.0.1": "1.0.3.2"}}
 
 sleep = False
 wakeup_counter = 0
 
 def read_traffic():
+    global last_sleep_edge_bw, sleep, wakeup_counter
     ospf = os.popen(f'echo -e "show ip ospf database opaque-area" | vtysh').read()
     #print(ospf)
     ospf = ospf.split("LS age")[1:]
@@ -79,14 +74,18 @@ def read_traffic():
     
     minimum = min(avail)
 
+    sleep_edge_bw = last_sleep_edge_bw
+
     for edge in nx.edges(G):
         if sleep_edge[0] in edge and sleep_edge[1] in edge:
             sleep_edge_bw = G[edge[0]][edge[1]]
+            last_sleep_edge_bw = sleep_edge_bw
             print("Monitored Edge: ")
             print(G[edge[0]][edge[1]])
             continue
         #print(edge)
         print(G[edge[0]][edge[1]])
+    
     
     wakeup_counter -= 1
     for i, link in enumerate(avail):
@@ -137,4 +136,4 @@ for router in sleep_edge:
     s.close()
 
 sleep = False
-
+time.sleep(10)

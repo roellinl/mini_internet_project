@@ -2,27 +2,8 @@
 import time
 import os
 import sys
-import asyncore
+import asyncio
 
-class Request_Handler(asyncore.dispatcher_with_send):
-
-    def handle_read(self):
-        data = self.recv(8192)
-        if data:
-            receive_command(data)
-
-class Server(asyncore.dispatcher):
-
-    def __init__(self, host, port):
-        asyncore.dispatcher.__init__(self)
-        self.create_socket()
-        self.set_reuse_addr()
-        self.bind((host, port))
-        self.listen(5)
-
-    def handle_accepted(self, sock, addr):
-        print('Incoming connection from %s' % repr(addr))
-        handler = Request_Handler(sock)
 
 def get_ip_to_intf():
     ip_to_intf = {}
@@ -36,19 +17,14 @@ def get_ip_to_intf():
     print(ip_to_intf,flush=True)
     return ip_to_intf
 
-def wakeup(intf, delay):
-    print(f"Add artificial delay of {delay} seconds before wakeup")
-    time.sleep(delay)
-    output = os.popen(f'echo -e "conf t \n interface {intf} \n no shutdown \n exit \n exit \n exit \n" | vtysh').read()
-    return output
-
-def receive_command(data):
+async def receive_command(reader, writer):
+    data = await reader.read(1024)
     global ip_to_intf
-
+    output = "empty"
     if data.decode() == "wake all":
         ip_to_intf = get_ip_to_intf()
         print(f"Add artificial delay of {delay} seconds before wakeup")
-        time.sleep(delay)
+        await asyncio.sleep(delay)
         for intf in ip_to_intf.values():
             print(f"wake all {intf}",flush=True)
             output = os.popen(f'echo -e "conf t \n interface {intf} \n no shutdown \n exit \n exit \n exit \n" | vtysh').read()
@@ -65,13 +41,29 @@ def receive_command(data):
         print(output, flush=True)
         output = os.popen(f'echo -e "conf t \n interface {intf} \n shutdown \n exit \n exit \n exit \n" | vtysh').read()
     elif command == "wake":
-        wakeup(intf, delay)
+        print(f"Add artificial delay of {delay} seconds before wakeup", flush=True)
+        await asyncio.sleep(delay)
+        output = os.popen(f'echo -e "conf t \n interface {intf} \n no shutdown \n exit \n exit \n exit \n" | vtysh').read()
     else:
-        print("unkown command")
+        output = "unkown command"
     print(output,flush=True)
+    print("Close the connection")
+    reader.close()
+    await reader.wait_closed()
+    writer.close()
+    await writer.wait_closed()
 
 
 
+async def main(address):
+    server = await asyncio.start_server(
+        receive_command, address[0], address[1])
+
+    addrs = ', '.join(str(sock.getsockname()) for sock in server.sockets)
+    print(f'Serving on {addrs}')
+
+    async with server:
+        await server.serve_forever()
 
 time.sleep(10)
 delay = 10
@@ -79,6 +71,6 @@ if len(sys.argv) == 2:
     delay = float(sys.argv[1])
 
 ip_to_intf = get_ip_to_intf()
-server = Server("", 2023)
-asyncore.loop()
+address = ("", 2023)
+asyncio.run(main(address))
 
