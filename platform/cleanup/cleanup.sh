@@ -32,8 +32,14 @@ echo -n "ovs-vsctl " > ovs_command.txt
 ./cleanup/ssh_cleanup.sh "${DIRECTORY}"
 ./cleanup/vpn_cleanup.sh "${DIRECTORY}"
 
-
 bash  < ovs_command.txt || true
+
+bridges=( $(ovs-vsctl list-br) )
+for i in "${bridges[@]}"
+do
+	echo "ovs-vsctl del-br $i"
+	ovs-vsctl del-br $i
+done
 rm -f ovs_command.txt
 
 # delete old running config files

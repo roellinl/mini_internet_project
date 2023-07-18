@@ -28,7 +28,9 @@ for link in links:
     print(linkstring)
     rx_old[link] = float(linkstring.split("\n")[3].lstrip().split()[0])
     tx_old[link] = float(linkstring.split("\n")[7].lstrip().split()[0])
-    max_bw[link] = float(os.popen(f'echo -e "show interface {link}" | vtysh').read().split("\n")[19].lstrip().split()[2])
+    for line in os.popen(f'echo -e "show interface {link}" | vtysh').read().split("\n"):
+        if "Maximum Bandwidth" in line:
+            max_bw[link] = float(line.lstrip().split()[2])
     link_use[link] = 0
     print(max_bw)
     print(f"{link}")
@@ -59,4 +61,3 @@ while True:
         counter = 0
     time.sleep(internal)
     print(time.time())
-

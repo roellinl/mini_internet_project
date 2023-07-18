@@ -143,6 +143,7 @@ for ((k=0;k<group_numbers;k++)); do
                 # start router
                 docker run -itd --net='none'  --dns="${subnet_dns%/*}" \
                     --name="${group_number}""_""${rname}""router" \
+		    --privileged \
                     --sysctl net.ipv4.ip_forward=1 \
                     --sysctl net.ipv4.icmp_ratelimit=0 \
                     --sysctl net.ipv4.fib_multipath_hash_policy=1 \

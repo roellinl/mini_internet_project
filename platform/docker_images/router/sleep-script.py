@@ -11,6 +11,8 @@ def get_ip_to_intf():
     print(link_ip.split("\n"))
     for interface in link_ip.split("\n")[7:-3]:
         print(interface.split())
+        if len(interface.split()) < 4:
+            continue
         linkid = interface.split()[3].split("/")[0]
         ip_to_intf[linkid] = interface.split()[0]
 
@@ -21,6 +23,7 @@ async def receive_command(reader, writer):
     data = await reader.read(1024)
     global ip_to_intf
     output = "empty"
+    print(data)
     if data.decode() == "wake all":
         ip_to_intf = get_ip_to_intf()
         print(f"Add artificial delay of {delay} seconds before wakeup")
@@ -28,15 +31,26 @@ async def receive_command(reader, writer):
         for intf in ip_to_intf.values():
             print(f"wake all {intf}",flush=True)
             output = os.popen(f'echo -e "conf t \n interface {intf} \n no shutdown \n exit \n exit \n exit \n" | vtysh').read()
+        reader.close()
+        await reader.wait_closed()
+        writer.close()
+        await writer.wait_closed()
         return
     
     command, link = data.decode().split()
     if link not in ip_to_intf:
         ip_to_intf = get_ip_to_intf()
     intf = ip_to_intf[link]
-    print(f"command: {command}, LinkId: {link}, Interface: {intf}")
+    print(f"command: {command}, LinkId: {link}, Interface: {intf}",flush=True)
     if command == "sleep":
-        max_bw = float(os.popen(f'echo -e "show interface {intf}" | vtysh').read().split("\n")[19].lstrip().split()[2])
+        bw_info = os.popen(f'echo -e "show interface {intf}" | vtysh').read().split("\n")
+        print(bw_info,flush=True)
+        for line in bw_info:
+            print(line,flush=True)
+            if "Maximum Bandwidth" in line:
+                max_bw = float(line.lstrip().split()[2])
+                break
+        print(f"max_bw: {max_bw}", flush=True)
         output = os.popen(f'echo -e "conf t \n interface {intf} \n link-params \n ava-bw {max_bw} \n use-bw 0 \n exit \n exit \n exit \n exit \n" | vtysh').read()
         print(output, flush=True)
         output = os.popen(f'echo -e "conf t \n interface {intf} \n shutdown \n exit \n exit \n exit \n" | vtysh').read()
@@ -73,4 +87,3 @@ if len(sys.argv) == 2:
 ip_to_intf = get_ip_to_intf()
 address = ("", 2023)
 asyncio.run(main(address))
-

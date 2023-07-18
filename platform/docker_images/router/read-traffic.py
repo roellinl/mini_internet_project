@@ -16,7 +16,6 @@ def read_traffic():
     ospf = ospf.split("LS age")[1:]
     elements = [None] * len(ospf)
 
-    global sleep, wakeup_counter
     type = 0
     for link_no, link in enumerate(ospf):
         for index, line in enumerate(link.split("\n")):
@@ -41,7 +40,8 @@ def read_traffic():
                 elements[link_no]["usage"] = float(line.split(":")[1].strip().split()[0])
             if "Maximum Bandwidth" in line:
                 elements[link_no]["bw"] = float(line.split(":")[1].strip().split()[0])
-    elements = elements[0:elements.index(None)]
+    if None in elements:
+        elements = elements[0:elements.index(None)]
     #print(elements)
     nodes = set([i["router_ip"] for i in elements])
     G = nx.Graph()
