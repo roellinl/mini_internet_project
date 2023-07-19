@@ -21,7 +21,6 @@ DIRECTORY="$1"
 docker system prune -f
 
 echo -n "ovs-vsctl " > ovs_command.txt
-
 ./cleanup/host_links_cleanup.sh "${DIRECTORY}"
 ./cleanup/layer2_cleanup.sh "${DIRECTORY}"
 ./cleanup/internal_links_cleanup.sh "${DIRECTORY}"

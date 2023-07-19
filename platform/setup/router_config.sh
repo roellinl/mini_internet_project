@@ -104,19 +104,20 @@ for ((k=0;k<group_numbers;k++));do
                 fi
 
                 router_id=$(subnet_router "${group_number}" "${i}")
-		echo " -c 'mpls ldp' \\"
-		echo " -c 'router-id "${router_id%/*}"' \\"
-		echo " -c 'address-family ipv4' \\"
-		echo " -c 'discovery transport-address "${router_id%/*}"' \\"
-		echo " -c 'exit' \\"
-		echo " -c 'exit' \\"
+		#echo " -c 'mpls ldp' \\"
+		#echo " -c 'router-id "${router_id%/*}"' \\"
+		#echo " -c 'address-family ipv4' \\"
+		#echo " -c 'discovery transport-address "${router_id%/*}"' \\"
+		#echo " -c 'exit' \\"
+		#echo " -c 'exit' \\"
                 echo " -c 'router ospf' \\"
+		echo " -c 'timers throttle spf 0 0 0' \\"
                 echo " -c 'ospf router-id "${router_id%/*}"' \\"
 		echo " -c 'ospf opaque-lsa' \\" # enable mpls-te
 		echo " -c 'mpls-te on' \\"
 		echo " -c 'mpls-te router-address "${router_id%/*}"' \\" #end
-		echo " -c 'segment-routing on' \\"
-                echo " -c 'segment-routing prefix "$(subnet_router "${group_number}" "${i}")" index 0' \\"
+		#echo " -c 'segment-routing on' \\"
+                #echo " -c 'segment-routing prefix "$(subnet_router "${group_number}" "${i}")" index 0' \\"
                 echo " -c 'network "$(subnet_router "${group_number}" "${i}")" area 0' \\"
                 echo " -c 'exit'\\"
                 echo " -c 'ip route "$(subnet_group "${group_number}")" null0' \\"
@@ -158,6 +159,9 @@ for ((k=0;k<group_numbers;k++));do
                 echo " -c 'ip address "$(subnet_router_router_intern "${group_number}" "${i}" 1)"' \\"
                 echo " -c 'ip ospf cost 1' \\"
 		echo " -c 'ip ospf network point-to-point' \\" # have point-to-point link
+		echo " -c 'ip ospf dead-interval minimal hello-multiplier 10' \\"
+		echo " -c 'ip ospf hello-interval 1' \\"
+		echo " -c 'ip ospf retransmit-interval 1' \\"
 		echo " -c 'link-params' \\" # more to enable mpls-te
                 echo " -c 'enable' \\"
                 echo " -c 'max-rsv-bw 0' \\"
@@ -175,18 +179,21 @@ for ((k=0;k<group_numbers;k++));do
                 echo " -c 'router ospf' \\"
                 echo " -c 'network "$(subnet_router_router_intern "${group_number}" "${i}" 1)" area 0' \\"
                 echo " -c 'exit' \\"
-		echo " -c 'mpls ldp' \\" #mpls ldp config
-                echo " -c 'address-family ipv4' \\"
-                echo " -c 'interface port_"${router2}"' \\"
-                echo " -c 'exit' \\"
-		echo " -c 'exit' \\"
-                echo " -c 'exit' \\" # end
+		#echo " -c 'mpls ldp' \\" #mpls ldp config
+                #echo " -c 'address-family ipv4' \\"
+                #echo " -c 'interface port_"${router2}"' \\"
+                #echo " -c 'exit' \\"
+		#echo " -c 'exit' \\"
+                #echo " -c 'exit' \\" # end
             } >> "${location1}"
             {
                 echo " -c 'interface port_"${router1}"' \\"
                 echo " -c 'ip address "$(subnet_router_router_intern "${group_number}" "${i}" 2)"' \\"
                 echo " -c 'ip ospf cost 1' \\"
 		echo " -c 'ip ospf network point-to-point' \\" # have point-to-point link
+		echo " -c 'ip ospf dead-interval minimal hello-multiplier 10' \\"
+		echo " -c 'ip ospf hello-interval 1' \\"
+                echo " -c 'ip ospf retransmit-interval 1' \\"
 		echo " -c 'link-params' \\" # more to enable mpls-te
                 echo " -c 'enable' \\"
 		echo " -c 'max-rsv-bw 0' \\"
@@ -204,12 +211,12 @@ for ((k=0;k<group_numbers;k++));do
                 echo " -c 'router ospf' \\"
                 echo " -c 'network "$(subnet_router_router_intern "${group_number}" "${i}" 2)" area 0' \\"
                 echo " -c 'exit' \\"
-		echo " -c 'mpls ldp' \\" #mpls ldp config
-                echo " -c 'address-family ipv4' \\"
-                echo " -c 'interface port_"${router1}"' \\"
-                echo " -c 'exit' \\"
-		echo " -c 'exit' \\"
-                echo " -c 'exit' \\" # end
+		#echo " -c 'mpls ldp' \\" #mpls ldp config
+                #echo " -c 'address-family ipv4' \\"
+                #echo " -c 'interface port_"${router1}"' \\"
+                #echo " -c 'exit' \\"
+		#echo " -c 'exit' \\"
+                #echo " -c 'exit' \\" # end
             } >> "${location2}"
         done
 

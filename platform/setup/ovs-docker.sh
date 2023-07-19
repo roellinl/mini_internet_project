@@ -190,8 +190,8 @@ add_port () {
     fi
 
     if [ -n "$DELAY" ]; then
-        echo "tc qdisc add dev "${PORTNAME}"_l root netem delay "${DELAY}ms" " >> groups/delay_throughput.sh
-        echo "  tc qdisc add dev "${PORTNAME}"_l root netem delay "${DELAY}ms" " >> groups/restart_container.sh
+        echo "tc qdisc add dev "${PORTNAME}"_l root netem delay ${DELAY}ms" >> groups/delay_throughput.sh
+        echo "  tc qdisc add dev "${PORTNAME}"_l root netem delay ${DELAY}ms" >> groups/restart_container.sh
     fi
 
     if [ -n "$THROUGHPUT" ]; then

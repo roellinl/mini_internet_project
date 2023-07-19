@@ -98,7 +98,7 @@ def read_traffic():
         if link/bws[i] < 0.2:
             print(f" utilization {link/bws[i]} {elements[i]['link_id']}")
             print("wake up")
-            wakeup_counter = 10
+            wakeup_counter = 20
             if not sleep:
                 print("already awake")
                 return
