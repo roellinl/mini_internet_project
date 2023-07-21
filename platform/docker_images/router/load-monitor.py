@@ -51,7 +51,7 @@ while True:
         linkstring = os.popen(f'ip -s -s link show dev {link}').read().split("\n")
         rx[link] = float(linkstring[3].lstrip().split()[0])
         tx[link] = float(linkstring[7].lstrip().split()[0])
-        link_use[link] = link_use[link]*0.2 + 0.8*round(max(rx[link]-rx_old[link],tx[link]-tx_old[link])/timeframe)
+        link_use[link] = round(link_use[link]*0.2 + 0.8*round(max(rx[link]-rx_old[link],tx[link]-tx_old[link])/timeframe))
         config += f"interface {link} \n link-params \n \
             ava-bw {max(0,max_bw[link]-link_use[link])} \n use-bw {link_use[link]} \n exit \n exit \n"
         rx_old[link], tx_old[link] = rx[link], tx[link]
