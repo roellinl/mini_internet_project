@@ -2,9 +2,12 @@ import os
 import networkx as nx
 import time
 import socket
+import sys
 
 sleep_edge = ["1.151.0.1","1.154.0.1"]
 last_sleep_edge_bw = {"ip": {"1.151.0.1": "1.0.3.1" ,"1.154.0.1": "1.0.3.2"}}
+
+sleeptype = sys.argv[1]
 
 sleep = False
 wakeup_counter = 0
@@ -60,6 +63,7 @@ def read_traffic():
                             "usage": max(link['usage'], link2['usage']),
                             "max_bw": max(link['bw'], link2['bw'])}))
                     link_ids.add(link["link_id"])
+                    
         if "Point-to-point" in link["link_type"]:
             for link2 in elements[index+1:]:
                 if link["remote_ip"] == link2["link_ip"]:
@@ -123,7 +127,10 @@ def read_traffic():
             print(router)
             s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             s.connect((router, 2023))
-            s.sendall(f"sleep {sleep_edge_bw['ip'][router]}".encode())
+            if sleeptype == "weightsleep":
+                s.sendall(f"weightsleep {sleep_edge_bw['ip'][router]}".encode())
+            else:
+                s.sendall(f"sleep {sleep_edge_bw['ip'][router]}".encode())
             s.close()
         sleep = True
         return

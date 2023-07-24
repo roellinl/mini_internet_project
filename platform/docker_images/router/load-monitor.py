@@ -17,7 +17,7 @@ max_bw = dict()
 tx_old = dict()
 rx_old = dict()
 link_use = dict()
-time.sleep(20)
+time.sleep(10)
 
 last_ts = time.time()
 
@@ -49,6 +49,9 @@ while True:
         if "port_" not in link:
             continue
         linkstring = os.popen(f'ip -s -s link show dev {link}').read().split("\n")
+        if "UP" not in linkstring[0]:
+            print(linkstring[0],flush=True)
+            continue
         rx[link] = float(linkstring[3].lstrip().split()[0])
         tx[link] = float(linkstring[7].lstrip().split()[0])
         link_use[link] = round(link_use[link]*0.2 + 0.8*round(max(rx[link]-rx_old[link],tx[link]-tx_old[link])/timeframe))
