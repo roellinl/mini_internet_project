@@ -111,7 +111,9 @@ for ((k=0;k<group_numbers;k++));do
 		#echo " -c 'exit' \\"
 		#echo " -c 'exit' \\"
                 echo " -c 'router ospf' \\"
-		echo " -c 'timers throttle spf 0 0 0' \\"
+		echo " -c 'timers throttle spf 10 10 100' \\"
+		echo " -c 'timers throttle lsa all 10' \\"
+		echo " -c 'timers lsa min-arrival 10' \\"
                 echo " -c 'ospf router-id "${router_id%/*}"' \\"
 		echo " -c 'ospf opaque-lsa' \\" # enable mpls-te
 		echo " -c 'mpls-te on' \\"
