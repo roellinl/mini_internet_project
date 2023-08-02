@@ -1,4 +1,4 @@
-FROM debian:stable
+FROM debian:12
 RUN apt-get update && apt-get install -y locales rsyslog iputils-ping openssh-server traceroute nmap dnsutils
 
 # Set locale
