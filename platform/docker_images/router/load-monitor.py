@@ -49,14 +49,15 @@ while True:
         if "port_" not in link:
             continue
         linkstring = os.popen(f'ip -s -s link show dev {link}').read().split("\n")
-        if "UP" not in linkstring[0]:
-            print(f"One of the Ports is down: {linkstring[0]}",flush=True)
+        
         rx[link] = float(linkstring[3].lstrip().split()[0])
         tx[link] = float(linkstring[7].lstrip().split()[0])
         link_use[link] = round(link_use[link]*0.2 + 0.8*round((tx[link]-tx_old[link])/timeframe))
+        rx_old[link], tx_old[link] = rx[link], tx[link]
+        if "UP" not in linkstring[0]:
+            print(f"One of the Ports is down: {linkstring[0]}",flush=True)
         config += f"interface {link} \n link-params \n \
             ava-bw {max(0,max_bw[link]-link_use[link])} \n use-bw {link_use[link]} \n exit \n exit \n"
-        rx_old[link], tx_old[link] = rx[link], tx[link]
     config+=f"exit \n exit \n"
     if counter == timestep:
         print(os.popen(f'echo -e "{config}" | vtysh').read())

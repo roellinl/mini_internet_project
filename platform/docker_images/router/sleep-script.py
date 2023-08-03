@@ -103,6 +103,7 @@ async def sleep(ts, command, intf):
 async def wake(ts, intf):
     if in_progress[intf] == ts:
         output = vtysh_command(f"conf t \n interface {intf} \n ip ospf cost 1 \n no shutdown \n exit \n exit \n exit \n")
+        output += vtysh_command(f"conf t \n router ospf \n no mpls-te on \n mpls-te on \n exit \n exit \n exit \n")
     return
 
 
