@@ -5,10 +5,12 @@ import socket
 import sys
 
 sleep_edges = [("1.151.0.1","1.154.0.1"),("1.151.0.1","1.153.0.1")]
+
 last_sleep_edge_bw = [None] * len(sleep_edges)
 sleep_edge_bw = [None] * len(sleep_edges)
 wakeup_counter = [0] * len(sleep_edges)
 sleep = [False] * len(sleep_edges)
+
 translate = {"1.151.0.1": "ZURI", "1.152.0.1": "BASE", "1.153.0.1": "GENE", "1.154.0.1": "LUGA", "1.155.0.1": "MUNI", "1.156.0.1": "LYON", "1.157.0.1": "VIEN", "1.158.0.1": "MILA"}
 sleeptype = sys.argv[1]
 
@@ -16,7 +18,7 @@ sleeptype = sys.argv[1]
 def main():
 
     for i in range(120):
-        read_traffic()
+        traffic_step()
         print("\n",flush=True)
         time.sleep(1)
 
@@ -31,6 +33,33 @@ def main():
     time.sleep(10)
 
 
+"""
+Helper function to add a link to the list of edges to add to the graph
+"""
+def add_link(link, link2, edges, link_ids):
+
+    edges.append((link["router_ip"], link2["router_ip"], 
+        {"ip": {f"{link['router_ip']}": link["link_ip"], f"{link2['router_ip']}": link2["link_ip"]},
+            "avail": link['avail'],
+            "usage": link['usage'],
+            "max_bw": link['bw']}))
+    
+    link_ids.add(link["link_id"])
+
+    edges.append((link2["router_ip"], link["router_ip"], 
+        {"ip": {f"{link2['router_ip']}": link2["link_ip"], f"{link['router_ip']}": link["link_ip"]},
+            "avail": link2['avail'],
+            "usage": link2['usage'],
+            "max_bw": link2['bw']}))
+
+    link_ids.add(link2["link_id"])
+
+    return edges, link_ids
+
+
+"""
+Creates a Graph object out of the information read out of the OSPF database
+"""
 def create_graph(elements):
 
     nodes = set([i["router_ip"] for i in elements])
@@ -45,22 +74,9 @@ def create_graph(elements):
                 if link["link_id"] == link2["link_id"]:
                     if link["link_id"] in link_ids:
                         break
-
-                    edges.append((link["router_ip"], link2["router_ip"], 
-                        {"ip": {f"{link['router_ip']}": link["link_ip"], f"{link2['router_ip']}": link2["link_ip"]},
-                            "avail": link['avail'],
-                            "usage": link['usage'],
-                            "max_bw": link['bw']}))
                     
-                    link_ids.add(link["link_id"])
-
-                    edges.append((link2["router_ip"], link["router_ip"], 
-                        {"ip": {f"{link2['router_ip']}": link2["link_ip"], f"{link['router_ip']}": link["link_ip"]},
-                            "avail": link2['avail'],
-                            "usage": link2['usage'],
-                            "max_bw": link2['bw']}))
-    
-                    link_ids.add(link2["link_id"])
+                    edges, link_ids = add_link(link, link2, edges, link_ids)
+                    
                     
         if "Point-to-point" in link["link_type"]:
             for link2 in elements[index+1:]:
@@ -68,28 +84,16 @@ def create_graph(elements):
                     if link["link_ip"] in link_ids:
                         break
 
-                    edges.append((link["router_ip"], link2["router_ip"], 
-                        {"ip": {f"{link['router_ip']}": link["link_ip"], f"{link2['router_ip']}": link2["link_ip"]},
-                            "avail": link['avail'],
-                            "usage": link['usage'],
-                            "max_bw": link['bw']}))
-                    
-                    link_ids.add(link["remote_ip"])
-
-                    edges.append((link2["router_ip"], link["router_ip"], 
-                        {"ip": {f"{link2['router_ip']}": link2["link_ip"], f"{link['router_ip']}": link["link_ip"]},
-                            "avail": link2['avail'],
-                            "usage": link2['usage'],
-                            "max_bw": link2['bw']}))
-                    
-                    link_ids.add(link2["remote_ip"])
+                    edges, link_ids = add_link(link, link2, edges, link_ids)
 
         
     G.add_edges_from(edges)
-
     return G
 
 
+"""
+Prints the links and traffic amounts of the graph and marks the monitored links
+"""
 def print_links(G, sleep_edges):
     global translate
     already_printed = set()
@@ -113,6 +117,9 @@ def print_links(G, sleep_edges):
         print(print_string)
 
 
+"""
+Decides on what to do with the given traffic for each sleep edge
+"""
 def react_to_traffic(index, sleep_edge, sleep_edge_bw, G):
     global sleep, wakeup_counter
  
@@ -169,9 +176,10 @@ def react_to_traffic(index, sleep_edge, sleep_edge_bw, G):
         sleep[index] = True
 
 
+"""
+Reads the traffic information from the OSPF database
+"""
 def read_traffic():
-    global last_sleep_edge_bw, sleep, wakeup_counter
-
     ospf = os.popen(f'echo -e "show ip ospf database opaque-area" | vtysh').read()
     #print(ospf)
     ospf = ospf.split("LS age")[1:]
@@ -205,8 +213,21 @@ def read_traffic():
 
     if None in elements:
         elements = elements[0:elements.index(None)]
+    return elements
+
+
+"""
+Main function that is called every second
+"""
+def traffic_step():
+    global last_sleep_edge_bw, sleep, wakeup_counter
+
+    elements = read_traffic()
 
     G = create_graph(elements)
+    
+    if len(G.edges()) == 0:
+        return
     
     for index, sleep_edge in enumerate(sleep_edges):
         if sleep_edge not in G.edges():
@@ -223,7 +244,6 @@ def read_traffic():
         react_to_traffic(index, sleep_edge, sleep_edge_bw[index], G)
     
     return
-
 
 
 if __name__ == "__main__":
