@@ -33,12 +33,12 @@ COPY looking_glass.sh /usr/local/bin/looking_glass
 COPY run_frr.sh /usr/local/bin/run_frr
 COPY load-monitor.py /load-monitor.py
 COPY sleep-script.py /sleep-script.py
-COPY read-traffic.py /read-traffic.py
+COPY controller.py /controller.py
 
 RUN apk add py3-pip
 RUN pip3 install networkx
 RUN chmod +x /usr/local/bin/looking_glass /usr/local/bin/run_frr
 RUN chmod +x /load-monitor.py
 RUN chmod +x /sleep-script.py
-RUN chmod +x /read-traffic.py
+RUN chmod +x /controller.py
 
