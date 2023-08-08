@@ -1,5 +1,7 @@
 FROM d_base_supervisor:latest
 
+RUN apk add --no-cache -X http://dl-cdn.alpinelinux.org/alpine/edge/community frr=9.0-r1
+
 RUN apk add --no-cache openssh-server openssh-client frr frr-rpki frr-pythontools \
     && ssh-keygen -A \
     && sed -i 's/#PasswordAuthentication yes/PasswordAuthentication no/g' /etc/ssh/sshd_config \

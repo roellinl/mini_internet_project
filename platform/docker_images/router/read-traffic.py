@@ -8,14 +8,16 @@ sleep_edges = [("1.151.0.1","1.154.0.1"),("1.151.0.1","1.153.0.1")]
 
 last_sleep_edge_bw = [None] * len(sleep_edges)
 sleep_edge_bw = [None] * len(sleep_edges)
-wakeup_counter = [0] * len(sleep_edges)
-sleep = [False] * len(sleep_edges)
+
+
 
 translate = {"1.151.0.1": "ZURI", "1.152.0.1": "BASE", "1.153.0.1": "GENE", "1.154.0.1": "LUGA", "1.155.0.1": "MUNI", "1.156.0.1": "LYON", "1.157.0.1": "VIEN", "1.158.0.1": "MILA"}
 sleeptype = sys.argv[1]
 
-
 def main():
+
+    global topo
+    topo = read_topology()
 
     for i in range(120):
         traffic_step()
@@ -120,17 +122,21 @@ def print_links(G, sleep_edges):
 """
 Decides on what to do with the given traffic for each sleep edge
 """
-def react_to_traffic(index, sleep_edge, sleep_edge_bw, G):
-    global sleep, wakeup_counter
+def react_to_traffic(sleep_edge, sleep_edge_bw, G):
+    global topo
  
     avail_perc = min([G[edge[0]][edge[1]]["avail"]/G[edge[0]][edge[1]]["max_bw"] for edge in G.edges()])
 
-    wakeup_counter[index] -= 1
+    topo[sleep_edge[0]][sleep_edge[1]]["counter"] -= 1 
+    topo[sleep_edge[1]][sleep_edge[0]]["counter"] -= 1
 
     if avail_perc < 0.2:
         print(f"Available too low: {avail_perc} -> wake up")
-        wakeup_counter[index] = 10
-        if not sleep[index]:
+        
+        topo[sleep_edge[0]][sleep_edge[1]]["counter"] = 10
+        topo[sleep_edge[1]][sleep_edge[0]]["counter"] = 10
+
+        if not topo[sleep_edge[0]][sleep_edge[1]]["sleep"]:
             print("Awake already sent")
             return
         for router in sleep_edge:
@@ -139,7 +145,8 @@ def react_to_traffic(index, sleep_edge, sleep_edge_bw, G):
             s.connect((router, 2023))
             s.sendall(f"wake {sleep_edge_bw[0]['ip'][router]}".encode())
             s.close()
-        sleep[index] = False
+        topo[sleep_edge[0]][sleep_edge[1]]["sleep"] = False
+        topo[sleep_edge[1]][sleep_edge[0]]["sleep"] = False
         return
 
     
@@ -157,10 +164,10 @@ def react_to_traffic(index, sleep_edge, sleep_edge_bw, G):
         minimum[i] = min(min_avail_list)
 
     if sleep_edge_bw[0]["usage"] < minimum[0] and sleep_edge_bw[1]["usage"] < minimum[1]:
-        if wakeup_counter[index] > 0:
+        if topo[sleep_edge[0]][sleep_edge[1]]["counter"] > 0:
             print("set to sleep -> wakeup in progress")
             return
-        if sleep[index]:
+        if topo[sleep_edge[0]][sleep_edge[1]]["sleep"]:
             print("Sleep command already sent")
             return
         print("set to sleep")
@@ -173,7 +180,8 @@ def react_to_traffic(index, sleep_edge, sleep_edge_bw, G):
             else:
                 s.sendall(f"sleep {sleep_edge_bw[0]['ip'][router]}".encode())
             s.close()
-        sleep[index] = True
+        topo[sleep_edge[0]][sleep_edge[1]]["sleep"] = True
+        topo[sleep_edge[1]][sleep_edge[0]]["sleep"] = True
 
 
 """
@@ -216,11 +224,23 @@ def read_traffic():
     return elements
 
 
+def read_topology():
+    graph = create_graph(read_traffic())
+    for edge in graph.edges():
+        graph[edge[0]][edge[1]].pop("avail")
+        graph[edge[0]][edge[1]].pop("usage")
+        graph[edge[0]][edge[1]]["sleep"] = False
+        graph[edge[0]][edge[1]]["counter"] = 0
+    for edge in graph.edges():
+        print(graph[edge[0]][edge[1]])
+    return graph
+
+
 """
 Main function that is called every second
 """
 def traffic_step():
-    global last_sleep_edge_bw, sleep, wakeup_counter
+    global last_sleep_edge_bw
 
     elements = read_traffic()
 
@@ -228,7 +248,7 @@ def traffic_step():
     
     if len(G.edges()) == 0:
         return
-    
+
     for index, sleep_edge in enumerate(sleep_edges):
         if sleep_edge not in G.edges():
             sleep_edge_bw[index] = last_sleep_edge_bw[index]
@@ -238,10 +258,10 @@ def traffic_step():
 
 
     print_links(G, sleep_edges)
-    
+
     for index, sleep_edge in enumerate(sleep_edges):
         print(sleep_edge)
-        react_to_traffic(index, sleep_edge, sleep_edge_bw[index], G)
+        react_to_traffic(sleep_edge, sleep_edge_bw[index], G)
     
     return
 
