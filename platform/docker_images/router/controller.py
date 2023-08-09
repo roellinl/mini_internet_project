@@ -3,9 +3,21 @@ import networkx as nx
 import time
 import socket
 import sys
+from multiprocessing import Process
 
 sleep_edges = [("1.151.0.1","1.154.0.1"),("1.151.0.1","1.153.0.1"),("1.151.0.1","1.152.0.1"),("1.151.0.1","1.157.0.1"),("1.151.0.1","1.155.0.1"),("1.153.0.1","1.152.0.1"),("1.152.0.1","1.155.0.1"),
                ("1.153.0.1","1.156.0.1"),("1.154.0.1","1.158.0.1"),("1.152.0.1","1.156.0.1"),("1.154.0.1","1.157.0.1"),("1.153.0.1","1.154.0.1")]
+
+if len(sys.argv) >= 3:
+    experiment = sys.argv[2]
+    if experiment == "1":
+        sleep_edges = [sleep_edges[0]]
+    elif experiment == "2":
+        sleep_edges = sleep_edges[0:2]
+    elif experiment == "all":
+        sleep_edges = sleep_edges
+
+
 
 last_sleep_edge_bw = [None] * len(sleep_edges)
 sleep_edge_bw = [None] * len(sleep_edges)
@@ -36,7 +48,7 @@ def main():
     for edge in topo.edges():
         sleeptime.append(topo[edge[0]][edge[1]]['sleeptime']/120.0 * 100)
         print(f"{translate[edge[0]]} - {translate[edge[1]]}: {topo[edge[0]][edge[1]]['sleeptime']/120.0 * 100} %")
-    print(f"Average: {sum(sleeptime)/len(sleeptime)} %")
+    print(f"Average Sleeptime: {sum(sleeptime)/len(sleeptime)} %")
 
 
 """
@@ -150,12 +162,10 @@ def react_to_traffic(sleep_edge, sleep_edge_bw, G, print_string):
         if not topo[sleep_edge[0]][sleep_edge[1]]["sleep"]:
             print_string += "Awake already sent"
             return print_string
-        for router in sleep_edge:
-            print_string += f"{router} \t"
-            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            s.connect((router, 2023))
-            s.sendall(f"wake {sleep_edge_bw[0]['ip'][router]}".encode())
-            s.close()
+        
+        p = Process(target=send_command, args=("wake", sleep_edge, sleep_edge_bw))
+        p.start()
+
         topo[sleep_edge[0]][sleep_edge[1]]["sleep"] = False
         return print_string
 
@@ -184,19 +194,30 @@ def react_to_traffic(sleep_edge, sleep_edge_bw, G, print_string):
             print_string += f"Not connected anymore"
             return print_string
         print_string += "set to sleep"
-        for router in sleep_edge:
-            print_string += f"{router} \t"
-            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            s.connect((router, 2023))
-            if sleeptype == "weightsleep":
-                s.sendall(f"weightsleep {sleep_edge_bw[0]['ip'][router]}".encode())
-            else:
-                s.sendall(f"sleep {sleep_edge_bw[0]['ip'][router]}".encode())
-            s.close()
+        
+
+        if sleeptype == "weightsleep":
+            p = Process(target=send_command, args=("weightsleep", sleep_edge, sleep_edge_bw))
+            p.start()
+        else:
+            p = Process(target=send_command, args=("sleep", sleep_edge, sleep_edge_bw))
+            p.start()
+
         topo[sleep_edge[0]][sleep_edge[1]]["sleep"] = True
+        topo[sleep_edge[0]][sleep_edge[1]]["sleeptime"] += 1
     
     return print_string
 
+
+def send_command(command, sleep_edge, sleep_edge_bw):
+    start = time.time()
+    for router in sleep_edge:
+            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            s.connect((router, 2023))
+            s.sendall(f"{command} {sleep_edge_bw[0]['ip'][router]}".encode())
+            s.close()
+    end = time.time()
+    print(end - start)
 
 """
 Reads the traffic information from the OSPF database

@@ -96,7 +96,7 @@ async def sleep(ts, command, intf):
             output = vtysh_command(f"conf t \n interface {intf} \n ip ospf cost 65535 \n exit \n exit \n exit \n")
         else:
             print(f"skipped cost because of newer command {in_progress[intf]},flush=True")
-        await asyncio.sleep(5)
+        await asyncio.sleep(1)
 
     if in_progress[intf] == ts:
         output = vtysh_command(f"conf t \n interface {intf} \n link-params \n ava-bw {max_bw} \n use-bw 0 \n exit \n shutdown \n exit \n exit \n exit \n")
