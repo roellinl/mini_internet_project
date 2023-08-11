@@ -154,6 +154,7 @@ add_port () {
     echo "  ovs-vsctl set interface "${PORTNAME}_l" external_ids:container_id="$CONTAINER" external_ids:container_iface="$INTERFACE >> groups/restart_container.sh
 
     echo "ip link set "${PORTNAME}_l" up" >> groups/ip_setup.sh
+    echo "ip link set dev "${PORTNAME}_l" mtu 9000" >> groups/ip_setup.sh
     echo "  ip link set "${PORTNAME}_l" up" >> groups/restart_container.sh
 
     # Move "${PORTNAME}_c" inside the container and changes its name.
@@ -168,6 +169,8 @@ add_port () {
     echo "  ip link set "${PORTNAME}_c" netns "\$PID"" >> groups/restart_container.sh
     echo "  ip netns exec "\$PID" ip link set dev "${PORTNAME}_c" name "$INTERFACE"" >> groups/restart_container.sh
     echo "  ip netns exec "\$PID" ip link set "$INTERFACE" up" >> groups/restart_container.sh
+
+    echo "ip netns exec "$PID" ip link set dev "$INTERFACE" mtu 9000" >> groups/ip_setup.sh
 
     if [ -n "$MTU" ]; then
         ip netns exec "$PID" ip link set dev "$INTERFACE" mtu "$MTU"
@@ -190,17 +193,19 @@ add_port () {
     fi
 
     if [ -n "$DELAY" ]; then
-	echo "tc qdisc add dev "${PORTNAME}"_l root handle 1: tbf rate ${THROUGHPUT}kbit buffer 1000kb latency 200ms " >> groups/delay_throughput.sh
-        echo "tc qdisc add dev "${PORTNAME}"_l parent 1:1 handle 10: netem delay ${DELAY}ms limit 25000" >> groups/delay_throughput.sh
-        echo "tc qdisc add dev "${PORTNAME}"_l root handle 1: tbf rate ${THROUGHPUT}kbit buffer 1000kb latency 200ms" >> groups/restart_container.sh
-	echo "tc qdisc add dev "${PORTNAME}"_l parent 1:1 handle 10: netem delay ${DELAY}ms limit 25000" >> groups/restart_container.sh
+	
+        echo "tc qdisc add dev "${PORTNAME}"_l root handle 1: netem delay ${DELAY}ms limit 15000" >> groups/delay_throughput.sh
+	    echo "tc qdisc add dev "${PORTNAME}"_l root handle 1: netem delay ${DELAY}ms limit 15000" >> groups/restart_container.sh
     fi
 
+
     if [ -n "$THROUGHPUT" ]; then
-	echo "no policing"
+	    echo "tc qdisc add dev "${PORTNAME}"_l parent 1:1 handle 10: tbf rate ${THROUGHPUT}kbit buffer 1000kb latency 100ms " >> groups/delay_throughput.sh
+        echo "tc qdisc add dev "${PORTNAME}"_l parent 1:1 handle 10: tbf rate ${THROUGHPUT}kbit buffer 1000kb latency 100ms" >> groups/restart_container.sh
         #echo "echo -n \" -- set interface "${PORTNAME}"_l ingress_policing_rate="${THROUGHPUT}" \" >> groups/throughput.sh " >> groups/delay_throughput.sh
         #echo "  ovs-vsctl set interface ${PORTNAME}_l ingress_policing_rate=${THROUGHPUT}" >> groups/restart_container.sh
     fi
+
 
     echo "fi" >> groups/restart_container.sh
 
