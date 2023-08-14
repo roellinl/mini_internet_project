@@ -33,6 +33,11 @@ DOCKERHUB_USER="miniinterneteth"
 
 echo "$(date +%Y-%m-%d_%H-%M-%S)"
 
+sudo sysctl -w net.core.wmem_max=8388608
+
+sudo sysctl -w net.core.rmem_max=8388608
+
+
 echo "cleanup.sh: "
 time ./cleanup/cleanup.sh "${DIRECTORY}"
 

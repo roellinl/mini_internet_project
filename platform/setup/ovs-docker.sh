@@ -200,8 +200,8 @@ add_port () {
 
 
     if [ -n "$THROUGHPUT" ]; then
-	    echo "tc qdisc add dev "${PORTNAME}"_l parent 1:1 handle 10: tbf rate ${THROUGHPUT}kbit buffer 1000kb latency 100ms " >> groups/delay_throughput.sh
-        echo "tc qdisc add dev "${PORTNAME}"_l parent 1:1 handle 10: tbf rate ${THROUGHPUT}kbit buffer 1000kb latency 100ms" >> groups/restart_container.sh
+	    echo "tc qdisc add dev "${PORTNAME}"_l parent 1:1 handle 10: tbf rate ${THROUGHPUT}kbit buffer 100kb latency 100ms " >> groups/delay_throughput.sh
+        echo "tc qdisc add dev "${PORTNAME}"_l parent 1:1 handle 10: tbf rate ${THROUGHPUT}kbit buffer 100kb latency 100ms" >> groups/restart_container.sh
         #echo "echo -n \" -- set interface "${PORTNAME}"_l ingress_policing_rate="${THROUGHPUT}" \" >> groups/throughput.sh " >> groups/delay_throughput.sh
         #echo "  ovs-vsctl set interface ${PORTNAME}_l ingress_policing_rate=${THROUGHPUT}" >> groups/restart_container.sh
     fi
