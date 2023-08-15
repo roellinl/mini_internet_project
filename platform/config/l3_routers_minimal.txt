@@ -1,0 +1,2 @@
+ZURI	DNS           host:miniinterneteth/d_host             linux
+BASE	MEASUREMENT   host:miniinterneteth/d_host             vtysh

@@ -1,1 +1,1 @@
-1	AS	Config	l3_routers_custom.txt	l3_links_custom.txt	empty.txt	empty.txt	empty.txt
+1	AS	Config	l3_routers_minimal.txt	l3_links_minimal.txt	empty.txt	empty.txt	empty.txt
