@@ -24,14 +24,15 @@ sleep_edge_bw = [None] * len(sleep_edges)
 
 translate = {"1.151.0.1": "ZURI", "1.152.0.1": "BASE", "1.153.0.1": "GENE", "1.154.0.1": "LUGA", "1.155.0.1": "MUNI", "1.156.0.1": "LYON", "1.157.0.1": "VIEN", "1.158.0.1": "MILA"}
 sleeptype = sys.argv[1]
-
+timestep = 0
 
 def main():
-    global topo
+    global topo, timestep
 
     topo = read_topology()
 
     for i in range(120):
+        timestep = i
         traffic_step()
         time.sleep(1)
 
@@ -45,9 +46,26 @@ def main():
 
     time.sleep(10)
     sleeptime = []
+    start = {}
     for edge in topo.edges():
-        sleeptime.append(topo[edge[0]][edge[1]]['sleeptime']/120.0 * 100)
-        print(f"{translate[edge[0]]} - {translate[edge[1]]}: {topo[edge[0]][edge[1]]['sleeptime']/120.0 * 100} %")
+        edge_name = f"{translate[edge[0]]} - {translate[edge[1]]}"
+        topo_sleeptime = topo[edge[0]][edge[1]]["sleeptime"]
+        start[edge_name] = []
+        if len(topo_sleeptime) > 1:
+            start_element = topo_sleeptime[0]
+            for i in range(len(topo_sleeptime)-1):
+                if topo_sleeptime[i] + 1 == topo_sleeptime[i+1]:
+                    continue
+                else:
+                    start[edge_name].append((start_element, topo_sleeptime[i]))
+                    start_element = topo_sleeptime[i+1]
+            start[edge_name].append((start_element, topo_sleeptime[-1]))
+        elif len(topo_sleeptime) == 1:
+            start[edge_name].append((topo_sleeptime[0], topo_sleeptime[0]))
+        sleeptime.append(len(topo_sleeptime)/120.0 * 100)
+        print(f"{edge_name}: {sleeptime[-1]} %")
+    print(start)
+
     print(f"Average Sleeptime: {sum(sleeptime)/len(sleeptime)} %")
 
 
@@ -148,7 +166,7 @@ def print_links(G, sleep_edges):
 Decides on what to do with the given traffic for each sleep edge
 """
 def react_to_traffic(sleep_edge, sleep_edge_bw, G, print_string):
-    global topo, translate
+    global topo, translate, timestep
  
     avail_perc = min([G[edge[0]][edge[1]]["avail"]/G[edge[0]][edge[1]]["max_bw"] for edge in G.edges()])
 
@@ -204,7 +222,7 @@ def react_to_traffic(sleep_edge, sleep_edge_bw, G, print_string):
             p.start()
 
         topo[sleep_edge[0]][sleep_edge[1]]["sleep"] = True
-        topo[sleep_edge[0]][sleep_edge[1]]["sleeptime"] += 1
+        topo[sleep_edge[0]][sleep_edge[1]]["sleeptime"].append(timestep)
     
     return print_string
 
@@ -277,7 +295,7 @@ def read_topology():
     for edge in temp_graph.edges():
         if edge in link_added:
             continue
-        graph.add_edge(edge[0],edge[1],ip=temp_graph[edge[0]][edge[1]]["ip"], sleep=False, counter=0, sleeptime=0)
+        graph.add_edge(edge[0],edge[1],ip=temp_graph[edge[0]][edge[1]]["ip"], sleep=False, counter=0, sleeptime=[])
         link_added.add((edge[1],edge[0]))
     for edge in graph.edges():
         print(graph[edge[0]][edge[1]])
@@ -288,7 +306,7 @@ def read_topology():
 Main function that is called every second
 """
 def traffic_step():
-    global last_sleep_edge_bw
+    global last_sleep_edge_bw, timestep
 
     elements = read_traffic()
 
@@ -299,7 +317,7 @@ def traffic_step():
 
     for index, sleep_edge in enumerate(sleep_edges):
         if topo[sleep_edge[0]][sleep_edge[1]]["sleep"]:
-            topo[sleep_edge[0]][sleep_edge[1]]["sleeptime"] += 1
+            topo[sleep_edge[0]][sleep_edge[1]]["sleeptime"].append(timestep)
         if sleep_edge not in G.edges():
             sleep_edge_bw[index] = last_sleep_edge_bw[index]
         else:
