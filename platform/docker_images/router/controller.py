@@ -19,8 +19,8 @@ if len(sys.argv) >= 3:
 
 
 
-last_sleep_edge_bw = [None] * len(sleep_edges)
-sleep_edge_bw = [None] * len(sleep_edges)
+last_sleep_edge_bws = [None] * len(sleep_edges)
+sleep_edge_bws = [None] * len(sleep_edges)
 
 translate = {"1.151.0.1": "ZURI", "1.152.0.1": "BASE", "1.153.0.1": "GENE", "1.154.0.1": "LUGA", "1.155.0.1": "MUNI", "1.156.0.1": "LYON", "1.157.0.1": "VIEN", "1.158.0.1": "MILA"}
 sleeptype = sys.argv[1]
@@ -163,79 +163,114 @@ def print_links(G, sleep_edges):
 
 
 """
-Decides on what to do with the given traffic for each sleep edge
+Decide which links can be put to sleep
 """
-def react_to_traffic(sleep_edge, sleep_edge_bw, G, print_string):
-    global topo, translate, timestep
- 
+def get_links_to_sleep(sleep_edges, sleep_edge_bws, G):
+
+    edges_to_sleep = [False for i in range(len(sleep_edges))]
+    
+    for index, sleep_edge in enumerate(sleep_edges):
+        sleep_edge_bw = sleep_edge_bws[index]
+        minimum = [0] * len(sleep_edge)
+        for i, node in enumerate(sleep_edge):
+            if node not in G.nodes():
+                break
+            min_avail_list = []
+            for neigh in nx.all_neighbors(G, node):
+                if neigh in sleep_edge:
+                    continue
+                min_avail_list.append(G[node][neigh]["avail"])
+
+            if len(min_avail_list) == 0:
+                break
+            minimum[i] = min(min_avail_list)
+
+        if sleep_edge_bw[0]["usage"] < minimum[0] and sleep_edge_bw[1]["usage"] < minimum[1]:
+            edges_to_sleep[index] = True
+
+    return edges_to_sleep
+
+
+"""
+Decide which links need to wake up
+"""
+def get_links_to_wake(sleep_edges, G):
+    edges_to_wake = [False for i in range(len(sleep_edges))]
+
     avail_perc = min([G[edge[0]][edge[1]]["avail"]/G[edge[0]][edge[1]]["max_bw"] for edge in G.edges()])
 
-    topo[sleep_edge[0]][sleep_edge[1]]["counter"] -= 1 
-
     if avail_perc < 0.2:
-        print_string += f"Available too low: {avail_perc} -> wake up \t"
-        
-        topo[sleep_edge[0]][sleep_edge[1]]["counter"] = 10
+       edges_to_wake = [True for i in range(len(sleep_edges))]
 
-        if not topo[sleep_edge[0]][sleep_edge[1]]["sleep"]:
-            print_string += "Awake already sent"
-            return print_string
-        
-        p = Process(target=send_command, args=("wake", sleep_edge, sleep_edge_bw))
-        p.start()
+    return edges_to_wake
 
-        topo[sleep_edge[0]][sleep_edge[1]]["sleep"] = False
-        return print_string
 
-    
-    minimum = [0] * len(sleep_edge)
-    for i, node in enumerate(sleep_edge):
-        if node not in G.nodes():
-            return print_string
-        min_avail_list = []
-        for neigh in nx.all_neighbors(G, node):
-            if neigh in sleep_edge:
-                continue
-            min_avail_list.append(G[node][neigh]["avail"])
-        if len(min_avail_list) == 0:
-            return print_string
-        minimum[i] = min(min_avail_list)
+""" 
+check if link state needs to be changed and if it will remain connected after the change 
+"""
+def check_link_state(edges_to_sleep, edges_to_wake, sleep_edges, sleep_edge_bws):
+    global topo, translate, timestep, sleeptype
 
-    if sleep_edge_bw[0]["usage"] < minimum[0] and sleep_edge_bw[1]["usage"] < minimum[1]:
+    print_string = ""
+    command_list = []
+
+    for index, sleep_edge in enumerate(sleep_edges):
+        sleep_edge_bw = sleep_edge_bws[index]
+        print_string += "\n"
+        print_string += f"{translate[sleep_edge[0]]} - {translate[sleep_edge[1]]}: \t"
+
         if topo[sleep_edge[0]][sleep_edge[1]]["counter"] > 0:
-            print_string += "set to sleep -> wakeup in progress"
-            return print_string
-        if topo[sleep_edge[0]][sleep_edge[1]]["sleep"]:
-            print_string += "Sleep command already sent"
-            return print_string
-        if check_connectedness(sleep_edge) == False:
-            print_string += f"Not connected anymore"
-            return print_string
-        print_string += "set to sleep"
-        
+            topo[sleep_edge[0]][sleep_edge[1]]["counter"] -= 1
 
-        if sleeptype == "weightsleep":
-            p = Process(target=send_command, args=("weightsleep", sleep_edge, sleep_edge_bw))
-            p.start()
-        else:
-            p = Process(target=send_command, args=("sleep", sleep_edge, sleep_edge_bw))
-            p.start()
+        if edges_to_wake[index] == True:
 
-        topo[sleep_edge[0]][sleep_edge[1]]["sleep"] = True
-        topo[sleep_edge[0]][sleep_edge[1]]["sleeptime"].append(timestep)
-    
-    return print_string
+            topo[sleep_edge[0]][sleep_edge[1]]["counter"] = 10
+            print_string += f"Available too low: -> wake up \t"
+
+            if not topo[sleep_edge[0]][sleep_edge[1]]["sleep"]:
+                print_string += "Awake already sent"
+                continue
+
+            command_list.append(Process(target=send_command, args=("wake", sleep_edge, sleep_edge_bw)))
+
+            topo[sleep_edge[0]][sleep_edge[1]]["sleep"] = False
+
+        elif edges_to_sleep[index] == True:
+
+            if topo[sleep_edge[0]][sleep_edge[1]]["counter"] > 0:
+                print_string += "set to sleep -> wakeup in progress"
+                continue
+            if topo[sleep_edge[0]][sleep_edge[1]]["sleep"]:
+                print_string += "Sleep command already sent"
+                continue
+            if check_connectedness(sleep_edge) == False:
+                print_string += f"Not connected anymore"
+                continue
+            print_string += "set to sleep"
+
+            if sleeptype == "weightsleep":
+                command_list.append(Process(target=send_command, args=("weightsleep", sleep_edge, sleep_edge_bw)))
+            else:
+                command_list.append(Process(target=send_command, args=("sleep", sleep_edge, sleep_edge_bw)))
+
+            topo[sleep_edge[0]][sleep_edge[1]]["sleep"] = True
+            topo[sleep_edge[0]][sleep_edge[1]]["sleeptime"].append(timestep)
+
+    print(print_string)
+    return command_list
 
 
+"""
+Sends the command to the router to sleep or wake up the link
+"""
 def send_command(command, sleep_edge, sleep_edge_bw):
-    start = time.time()
+    
     for router in sleep_edge:
             s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             s.connect((router, 2023))
             s.sendall(f"{command} {sleep_edge_bw[0]['ip'][router]}".encode())
             s.close()
-    end = time.time()
-    print(end - start)
+
 
 """
 Reads the traffic information from the OSPF database
@@ -277,6 +312,9 @@ def read_traffic():
     return elements
 
 
+"""
+Check if the network is still connected after setting the link to sleep
+"""
 def check_connectedness(sleep_edge):
     global topo
     H=topo.copy()
@@ -288,6 +326,9 @@ def check_connectedness(sleep_edge):
     return nx.is_connected(H)
 
 
+"""
+Reads the topology from the OSPF database
+"""
 def read_topology():
     temp_graph = create_graph(read_traffic())
     link_added = set()
@@ -306,7 +347,7 @@ def read_topology():
 Main function that is called every second
 """
 def traffic_step():
-    global last_sleep_edge_bw, timestep
+    global last_sleep_edge_bws, timestep
 
     elements = read_traffic()
 
@@ -319,20 +360,28 @@ def traffic_step():
         if topo[sleep_edge[0]][sleep_edge[1]]["sleep"]:
             topo[sleep_edge[0]][sleep_edge[1]]["sleeptime"].append(timestep)
         if sleep_edge not in G.edges():
-            sleep_edge_bw[index] = last_sleep_edge_bw[index]
+            sleep_edge_bws[index] = last_sleep_edge_bws[index]
         else:
-            sleep_edge_bw[index] = (G[sleep_edge[0]][sleep_edge[1]],G[sleep_edge[1]][sleep_edge[0]])
-            last_sleep_edge_bw[index] = sleep_edge_bw[index]
+            sleep_edge_bws[index] = (G[sleep_edge[0]][sleep_edge[1]],G[sleep_edge[1]][sleep_edge[0]])
+            last_sleep_edge_bws[index] = sleep_edge_bws[index]
 
 
     print_links(G, sleep_edges)
-    print_string = ""
-    for index, sleep_edge in enumerate(sleep_edges):
-        print_string += f"{translate[sleep_edge[0]]} - {translate[sleep_edge[1]]}: \t"
-        print_string = react_to_traffic(sleep_edge, sleep_edge_bw[index], G, print_string)
-        print_string += "\n"
-    print(print_string)
     
+    edges_to_sleep = get_links_to_sleep(sleep_edges, sleep_edge_bws, G)
+    edges_to_wake = get_links_to_wake(sleep_edges, G)
+
+    command_list = check_link_state(edges_to_sleep, edges_to_wake, sleep_edges, sleep_edge_bws)
+
+    if len(command_list) > 0:
+        start = time.time()
+        for command in command_list:
+            command.start()
+        for command in command_list:
+            command.join()
+        end = time.time()
+        print(end - start)
+
     return
 
 
