@@ -52,7 +52,7 @@ while True:
         
         rx[link] = float(linkstring[3].lstrip().split()[0])
         tx[link] = float(linkstring[7].lstrip().split()[0])
-        link_use[link] = round(link_use[link]*0.2 + 0.8*round((tx[link]-tx_old[link])/timeframe))
+        link_use[link] = min(max_bw[link],round(link_use[link]*0.2 + 0.8*round((tx[link]-tx_old[link])/timeframe)))
         rx_old[link], tx_old[link] = rx[link], tx[link]
         if "UP" not in linkstring[0]:
             print(f"One of the Ports is down: {linkstring[0]}",flush=True)
