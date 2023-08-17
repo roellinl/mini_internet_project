@@ -39,7 +39,10 @@ async def receive_command(reader, writer):
         ip_to_intf = get_ip_to_intf()
 
     intf = ip_to_intf[link]
-    in_progress[intf] = ts
+    if intf in in_progress and in_progress[intf][1] == command:
+        print(f"skipped because of same command {in_progress[intf][1]}")
+        return
+    in_progress[intf] = (ts, command)
 
     print(in_progress,flush=True)
     print(f"command: {command}, LinkId: {link}, Interface: {intf}",flush=True)
@@ -65,7 +68,10 @@ async def wake_all(ts):
     global in_progress, ip_to_intf
     ip_to_intf = get_ip_to_intf()
     for intf in ip_to_intf.values():
-        in_progress[intf] = ts
+        if intf in in_progress and in_progress[intf][1] == "wake":
+            print(f"skipped because of same command {in_progress[intf][1]}")
+            continue
+        in_progress[intf] = (ts, "wake")
         print(in_progress,flush=True)
     print(f"Add artificial delay of {delay} seconds before wakeup")
     await asyncio.sleep(delay)
@@ -87,7 +93,7 @@ async def sleep(ts, command, intf):
     print(f"max_bw: {max_bw}", flush=True)
 
     if command == "weightsleep":
-        if in_progress[intf] == ts:
+        if in_progress[intf][0] == ts:
             cost_string = vtysh_command(f"show ip ospf interface {intf} json \n exit \n")
             cost_string = cost_string[cost_string.index("{"):cost_string.rindex("}")+2]
             cost = json.loads(cost_string)["interfaces"][intf]["cost"]
@@ -95,19 +101,19 @@ async def sleep(ts, command, intf):
             last_ospf_cost[intf] = cost
             output = vtysh_command(f"conf t \n interface {intf} \n ip ospf cost 65535 \n exit \n exit \n exit \n")
         else:
-            print(f"skipped cost because of newer command {in_progress[intf]},flush=True")
+            print(f"skipped cost because of newer command {in_progress[intf][0]},flush=True")
         await asyncio.sleep(1)
 
-    if in_progress[intf] == ts:
+    if in_progress[intf][0] == ts:
         output = vtysh_command(f"conf t \n interface {intf} \n link-params \n ava-bw {max_bw} \n use-bw 0 \n exit \n shutdown \n exit \n exit \n exit \n")
     else:
-        print(f"skipped because of newer command {in_progress[intf]},flush=True")
+        print(f"skipped because of newer command {in_progress[intf][0]},flush=True")
 
     return
 
 
 async def wake(ts, intf):
-    if in_progress[intf] == ts:
+    if in_progress[intf][0] == ts:
         if intf not in last_ospf_cost.keys():
             last_ospf_cost[intf] = 1
         output = vtysh_command(f"conf t \n interface {intf} \n ip ospf cost {last_ospf_cost[intf]} \n no shutdown \n exit \n exit \n exit \n")

@@ -7,6 +7,7 @@ from multiprocessing import Process
 
 sleep_edges = [("1.151.0.1","1.154.0.1"),("1.151.0.1","1.153.0.1"),("1.151.0.1","1.152.0.1"),("1.151.0.1","1.157.0.1"),("1.151.0.1","1.155.0.1"),("1.153.0.1","1.152.0.1"),("1.152.0.1","1.155.0.1"),
                ("1.153.0.1","1.156.0.1"),("1.154.0.1","1.158.0.1"),("1.152.0.1","1.156.0.1"),("1.154.0.1","1.157.0.1"),("1.153.0.1","1.154.0.1")]
+nodes = ["1.151.0.1", "1.152.0.1", "1.153.0.1", "1.154.0.1", "1.155.0.1", "1.156.0.1", "1.157.0.1", "1.158.0.1"]
 
 if len(sys.argv) >= 3:
     experiment = sys.argv[2]
@@ -41,12 +42,11 @@ def main():
         time.sleep(max(0, 1 - (end - start)))
 
     print("wake all")
-    for sleep_edge in sleep_edges:
-        for router in sleep_edge:        
-            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            s.connect((router, 2023))
-            s.sendall(f"wake all".encode())
-            s.close()
+    for node in nodes: 
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        s.connect((node, 2023))
+        s.sendall(f"wake all".encode())
+        s.close()
 
     time.sleep(10)
     sleeptime = []
