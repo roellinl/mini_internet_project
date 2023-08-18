@@ -6,13 +6,12 @@ import socket
 
 nodes = ["1.151.0.1", "1.152.0.1", "1.153.0.1", "1.154.0.1", "1.155.0.1", "1.156.0.1", "1.157.0.1", "1.158.0.1"]
 
-def wake_up_network(nodes):
+def wake_up_network(controller_ip):
     print("wake all")
-    for node in nodes: 
-        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        s.connect((node, 2023))
-        s.sendall(f"wake all".encode())
-        s.close()
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    s.connect((controller_ip, 2024))
+    s.sendall(f"wake all".encode())
+    s.close()
 
 
 timestep = 10
@@ -66,10 +65,10 @@ while True:
         tx[link] = float(linkstring[7].lstrip().split()[0])
         link_use[link] = min(max_bw[link],round(link_use[link]*0.2 + 0.8*round((tx[link]-tx_old[link])/timeframe)))
 
-        #if link_use[link]/max_bw[link] > 0.8:
-        #    print(f"utilization: {link_use[link]/max_bw[link]}")
-        #    print(f"link {link} is congested")
-        #    wake_up_network(nodes)
+        if link_use[link]/max_bw[link] > 0.8:
+            print(f"utilization: {link_use[link]/max_bw[link]}")
+            print(f"link {link} is congested")
+            #wake_up_network("1.157.0.1")
 
         rx_old[link], tx_old[link] = rx[link], tx[link]
         if "UP" not in linkstring[0]:

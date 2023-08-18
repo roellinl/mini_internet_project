@@ -9,6 +9,10 @@ sleep_edges = [("1.151.0.1","1.154.0.1"),("1.151.0.1","1.153.0.1"),("1.151.0.1",
                ("1.153.0.1","1.156.0.1"),("1.154.0.1","1.158.0.1"),("1.152.0.1","1.156.0.1"),("1.154.0.1","1.157.0.1"),("1.153.0.1","1.154.0.1")]
 nodes = ["1.151.0.1", "1.152.0.1", "1.153.0.1", "1.154.0.1", "1.155.0.1", "1.156.0.1", "1.157.0.1", "1.158.0.1"]
 
+
+sleeptype = sys.argv[1]
+timestep = 0
+hysterisis = 0
 if len(sys.argv) >= 3:
     experiment = sys.argv[2]
     if experiment == "1":
@@ -18,23 +22,48 @@ if len(sys.argv) >= 3:
     elif experiment == "all":
         sleep_edges = sleep_edges
 
+if len(sys.argv) >= 4:
+    hysterisis = int(sys.argv[3])
 
 
 last_sleep_edge_bws = [None] * len(sleep_edges)
 
 translate = {"1.151.0.1": "ZURI", "1.152.0.1": "BASE", "1.153.0.1": "GENE", "1.154.0.1": "LUGA", "1.155.0.1": "MUNI", "1.156.0.1": "LYON", "1.157.0.1": "VIEN", "1.158.0.1": "MILA"}
-sleeptype = sys.argv[1]
-timestep = 0
+
 
 def main():
     global topo, timestep
 
     topo = read_topology()
+    """counter = 0
+    s = socket.socket()
+    s.bind(('', 2024))
+    s.listen(5)
+    s.settimeout(0.1)
+    """
 
     for i in range(120):
         start = time.time()
         timestep = i
+        #if counter == 0:
         traffic_step()
+        """else:
+            counter -= 1
+            print(counter)
+
+        try:
+            con, addr = s.accept()
+            print(f"Connection from {addr} {i}")
+            print(con.recv(1024).decode())
+            counter = 5
+            for node in nodes: 
+                s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                s.connect((node, 2023))
+                s.sendall(f"wake all".encode())
+                s.close()
+        except:
+            print("no connection")
+        """
         end = time.time()
         if (end - start) > 1:
             print(f"Warning: timestep {i} took {end - start} seconds")
@@ -213,7 +242,7 @@ def get_links_to_wake(sleep_edges, G):
 check if link state needs to be changed and if it will remain connected after the change 
 """
 def check_link_state(edges_to_sleep, edges_to_wake, G):
-    global topo, translate, timestep, sleeptype
+    global topo, translate, timestep, sleeptype, hysterisis
 
     print_string = ""
     command_list = []
@@ -225,7 +254,7 @@ def check_link_state(edges_to_sleep, edges_to_wake, G):
     for sleep_edge in edges_to_wake:
         print_string += "\n"
         print_string += f"{translate[sleep_edge[0]]} - {translate[sleep_edge[1]]}: \t"
-        topo[sleep_edge[0]][sleep_edge[1]]["counter"] = 10
+        topo[sleep_edge[0]][sleep_edge[1]]["counter"] = hysterisis
         print_string += f"Available too low: -> wake up \t"
 
         if not topo[sleep_edge[0]][sleep_edge[1]]["sleep"]:
