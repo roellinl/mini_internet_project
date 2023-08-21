@@ -35,19 +35,19 @@ def main():
     global topo, timestep
 
     topo = read_topology()
-    """counter = 0
+    counter = 0
     s = socket.socket()
     s.bind(('', 2024))
     s.listen(5)
     s.settimeout(0.1)
-    """
+    
 
     for i in range(120):
         start = time.time()
         timestep = i
-        #if counter == 0:
-        traffic_step()
-        """else:
+        if counter == 0:
+            traffic_step()
+        else:
             counter -= 1
             print(counter)
 
@@ -63,7 +63,7 @@ def main():
                 s.close()
         except:
             print("no connection")
-        """
+
         end = time.time()
         if (end - start) > 1:
             print(f"Warning: timestep {i} took {end - start} seconds")

@@ -12,6 +12,11 @@ def wake_up_network(controller_ip):
     s.connect((controller_ip, 2024))
     s.sendall(f"wake all".encode())
     s.close()
+    for node in nodes:
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        s.connect((node, 2023))
+        s.sendall(f"wake all".encode())
+        s.close()
 
 
 timestep = 10
@@ -50,6 +55,7 @@ for link in links:
 time.sleep(internal)
 
 while True:
+    start = time.time()
     counter += 1
     links = os.popen("ifconfig -a | sed 's/[ :\t].*//;/^$/d'").read().split()
     # print(links)
@@ -68,7 +74,7 @@ while True:
         if link_use[link]/max_bw[link] > 0.8:
             print(f"utilization: {link_use[link]/max_bw[link]}")
             print(f"link {link} is congested")
-            #wake_up_network("1.157.0.1")
+            wake_up_network("1.157.0.1")
 
         rx_old[link], tx_old[link] = rx[link], tx[link]
         if "UP" not in linkstring[0]:
@@ -79,5 +85,8 @@ while True:
     if counter == timestep:
         print(os.popen(f'echo -e "{config}" | vtysh').read())
         counter = 0
-    time.sleep(internal)
+    end = time.time()
+    if (end - start) > internal:
+        print(f"Warning: timestep took {end - start} seconds")
+    time.sleep(max(0, 1 - (end - start)))
     print(time.time())
