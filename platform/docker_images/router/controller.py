@@ -9,7 +9,7 @@ sleep_edges = [("1.151.0.1","1.154.0.1"),("1.151.0.1","1.153.0.1"),("1.151.0.1",
                ("1.153.0.1","1.156.0.1"),("1.154.0.1","1.158.0.1"),("1.152.0.1","1.156.0.1"),("1.154.0.1","1.157.0.1"),("1.153.0.1","1.154.0.1")]
 nodes = ["1.151.0.1", "1.152.0.1", "1.153.0.1", "1.154.0.1", "1.155.0.1", "1.156.0.1", "1.157.0.1", "1.158.0.1"]
 
-
+linkmargin = 0.2
 sleeptype = sys.argv[1]
 timestep = 0
 hysterisis = 0
@@ -52,15 +52,19 @@ def main():
             print(counter)
 
         try:
-            con, addr = s.accept()
-            print(f"Connection from {addr} {i}")
-            print(con.recv(1024).decode())
-            counter = 5
-            for node in nodes: 
-                s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                s.connect((node, 2023))
-                s.sendall(f"wake all".encode())
-                s.close()
+            while True:
+                con, addr = s.accept()
+                print(f"Connection from {addr} {i}")
+                print(con.recv(1024).decode())
+                counter = 10
+                for node in nodes: 
+                    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                    s.connect((node, 2023))
+                    s.sendall(f"wake all".encode())
+                    s.close()
+                for edge in topo.edges():
+                    topo[edge[0]][edge[1]]["sleep"] = False
+                    
         except:
             print("no connection")
 
@@ -165,6 +169,7 @@ Prints the links and traffic amounts of the graph and marks the monitored links
 """
 def print_links(G, sleep_edges):
     global translate
+
     already_printed = set()
     print_string = ""
     monitored_string = "Monitored: \n"
@@ -199,6 +204,7 @@ def print_links(G, sleep_edges):
 Decide which links can be put to sleep
 """
 def get_links_to_sleep(sleep_edges, G):
+    global linkmargin
 
     edges_to_sleep = []
 
@@ -212,7 +218,8 @@ def get_links_to_sleep(sleep_edges, G):
             for neigh in nx.all_neighbors(G, node):
                 if neigh in sleep_edge:
                     continue
-                min_avail_list.append(G[node][neigh]["avail"])
+                margin = G[node][neigh]["max_bw"] * linkmargin
+                min_avail_list.append(max(0, G[node][neigh]["avail"]-margin))
 
             if len(min_avail_list) == 0:
                 break
@@ -228,11 +235,13 @@ def get_links_to_sleep(sleep_edges, G):
 Decide which links need to wake up
 """
 def get_links_to_wake(sleep_edges, G):
+    global linkmargin
+
     edges_to_wake = []
 
     avail_perc = min([G[edge[0]][edge[1]]["avail"]/G[edge[0]][edge[1]]["max_bw"] for edge in G.edges()])
 
-    if avail_perc < 0.2:
+    if avail_perc < linkmargin:
        edges_to_wake = sleep_edges.copy()
 
     return edges_to_wake
@@ -384,7 +393,7 @@ def optimize_link_sleep(edges_to_sleep, G):
     for index, edge in enumerate(edges_to_sleep):
         score1 = G[edge[0]][edge[1]]["avail"] / G[edge[0]][edge[1]]["max_bw"]
         score2 = G[edge[1]][edge[0]]["avail"] / G[edge[1]][edge[0]]["max_bw"]
-        score[index] = (min(score1,score2), edge)
+        score[index] = (min(score1, score2), edge)
     
     score.sort(reverse=True)
     print(score)

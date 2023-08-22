@@ -74,7 +74,7 @@ while True:
         if link_use[link]/max_bw[link] > 0.8:
             print(f"utilization: {link_use[link]/max_bw[link]}")
             print(f"link {link} is congested")
-            wake_up_network("1.157.0.1")
+            #wake_up_network("1.157.0.1")
 
         rx_old[link], tx_old[link] = rx[link], tx[link]
         if "UP" not in linkstring[0]:
