@@ -7,6 +7,7 @@ import json
 
 in_progress={}
 last_ospf_cost = {}
+default_delay = 10
 
 async def main(address):
     server = await asyncio.start_server(
@@ -21,41 +22,52 @@ async def main(address):
 
 
 async def receive_command(reader, writer):
-    global in_progress, ip_to_intf
+    global in_progress, ip_to_intf, default_delay
+
     ts = time.time()
     data = await reader.read(1024)
     output = "empty"
-    print(data)
+    command = data.decode()
+    print(f"command: {command}",flush=True)
 
-    if data.decode() == "wake all":
-        await wake_all(ts)
+    if "wake all" in command:
+        if len(command.split()) == 3:
+            delay = float(command.split()[2])
+        else:
+            delay = default_delay
+
+        await wake_all(ts, delay)
         writer.close()
         await writer.wait_closed()
         return
     
-    command, link = data.decode().split()
+    link_cmd = command.split()[0]
+    link = command.split()[1]
+
+    if len(command.split()) == 3:
+        delay = float(command.split()[2])
+    else:
+        delay = default_delay
 
     if link not in ip_to_intf:
         ip_to_intf = get_ip_to_intf()
 
     intf = ip_to_intf[link]
-    if intf in in_progress and in_progress[intf][1] == command:
-        print(f"skipped because of same command {in_progress[intf][1]}")
+    if intf in in_progress and in_progress[intf][1] == link_cmd:
+        print(f"skipped because of same link_cmd {in_progress[intf][1]}")
         return
-    in_progress[intf] = (ts, command)
+    in_progress[intf] = (ts, link_cmd)
 
     print(in_progress,flush=True)
-    print(f"command: {command}, LinkId: {link}, Interface: {intf}",flush=True)
+    print(f"link_cmd: {link_cmd}, LinkId: {link}, Interface: {intf}",flush=True)
     
-    if command == "sleep" or command == "weightsleep":
-        await sleep(ts, command, intf)
+    if link_cmd == "sleep" or link_cmd == "weightsleep":
+        await sleep(ts, link_cmd, intf)
         
-    elif command == "wake":
-        print(f"Add artificial delay of {delay} seconds before wakeup", flush=True)
-        await asyncio.sleep(delay)
-        await wake(ts, intf)
+    elif link_cmd == "wake":
+        await wake(ts, intf, delay)
     else:
-        output = "unkown command"
+        output = "unkown link_cmd"
         print(output,flush=True)
 
     print("Close the connection")
@@ -64,27 +76,31 @@ async def receive_command(reader, writer):
     return
 
 
-async def wake_all(ts):
+async def wake_all(ts, delay):
     global in_progress, ip_to_intf
+
     ip_to_intf = get_ip_to_intf()
+
     for intf in ip_to_intf.values():
         if intf in in_progress and in_progress[intf][1] == "wake":
             print(f"skipped because of same command {in_progress[intf][1]}")
             continue
         in_progress[intf] = (ts, "wake")
-        print(in_progress,flush=True)
-    print(f"Add artificial delay of {delay} seconds before wakeup")
-    await asyncio.sleep(delay)
-    for intf in ip_to_intf.values():
         print(f"wake all {intf}",flush=True)
-        await wake(ts, intf)
+        print(f"in progress: {in_progress}",flush=True)
+    
+    print(f"Add artificial delay of {delay} seconds before wakeup", flush=True)
+    await asyncio.sleep(delay)
+
+    for intf in ip_to_intf.values():
+        await wake(ts, intf, 0)
     return
 
 
 async def sleep(ts, command, intf):
     bw_info = vtysh_command(f"show interface {intf}").split("\n")
 
-    print(bw_info,flush=True)
+    #print(bw_info,flush=True)
     for line in bw_info:
         print(line,flush=True)
         if "Maximum Bandwidth" in line:
@@ -112,7 +128,11 @@ async def sleep(ts, command, intf):
     return
 
 
-async def wake(ts, intf):
+async def wake(ts, intf, delay):
+
+    print(f"Add artificial delay of {delay} seconds before wakeup", flush=True)
+    await asyncio.sleep(delay)
+
     if in_progress[intf][0] == ts:
         if intf not in last_ospf_cost.keys():
             last_ospf_cost[intf] = 1
@@ -143,10 +163,11 @@ def get_ip_to_intf():
 
 
 if __name__=="__main__":
+    
     time.sleep(10)
-    delay = 10
-    if len(sys.argv) == 2:
-        delay = float(sys.argv[1])
+
+    if len(sys.argv)==2:
+        default_delay = float(sys.argv[1])
 
     ip_to_intf = get_ip_to_intf()
     address = ("", 2023)

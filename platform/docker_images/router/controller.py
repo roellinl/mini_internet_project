@@ -2,35 +2,54 @@ import os
 import networkx as nx
 import time
 import socket
-import sys
+import argparse
 from multiprocessing import Process
 
-sleep_edges = [("1.151.0.1","1.154.0.1"),("1.151.0.1","1.153.0.1"),("1.151.0.1","1.152.0.1"),("1.151.0.1","1.157.0.1"),("1.151.0.1","1.155.0.1"),("1.153.0.1","1.152.0.1"),("1.152.0.1","1.155.0.1"),
-               ("1.153.0.1","1.156.0.1"),("1.154.0.1","1.158.0.1"),("1.152.0.1","1.156.0.1"),("1.154.0.1","1.157.0.1"),("1.153.0.1","1.154.0.1")]
-sleep_edges = [('1.151.0.1', '1.152.0.1'), ('1.153.0.1', '1.152.0.1'), ('1.153.0.1', '1.154.0.1'), ('1.162.0.1', '1.152.0.1'), ('1.154.0.1', '1.155.0.1'), ('1.155.0.1', '1.152.0.1'), ('1.155.0.1', '1.164.0.1'), ('1.162.0.1', '1.164.0.1'), ('1.155.0.1', '1.156.0.1'), ('1.163.0.1', '1.160.0.1'), ('1.160.0.1', '1.162.0.1'), ('1.163.0.1', '1.162.0.1'), ('1.163.0.1', '1.165.0.1'), ('1.164.0.1', '1.161.0.1'), ('1.165.0.1', '1.161.0.1'), ('1.165.0.1', '1.164.0.1'), ('1.160.0.1', '1.161.0.1'), ('1.151.0.1', '1.157.0.1'), ('1.151.0.1', '1.158.0.1'), ('1.151.0.1', '1.159.0.1'), ('1.151.0.1', '1.160.0.1'), ('1.151.0.1', '1.161.0.1'), ('1.156.0.1', '1.160.0.1'), ('1.156.0.1', '1.161.0.1'), ('1.156.0.1', '1.157.0.1'), ('1.156.0.1', '1.158.0.1'), ('1.156.0.1', '1.159.0.1')]
-
-nodes = [f"1.{150+i+1}.0.1" for i in range(15)]
-
-translate = {"1.151.0.1": "ZURI", "1.152.0.1": "BASE", "1.153.0.1": "GENE", "1.154.0.1": "LUGA", "1.155.0.1": "MUNI", "1.156.0.1": "LYON", "1.157.0.1": "VIEN", "1.158.0.1": "MILA"}
-translate = {'1.151.0.1': 'BGW-LEE', '1.152.0.1': 'FW-LEE', '1.153.0.1': 'GW-LEE', '1.154.0.1': 'GW-HCI', '1.155.0.1': 'FW-HCI', '1.156.0.1': 'BGW-HCI', '1.157.0.1': 'OCT', '1.158.0.1': 'OX', '1.159.0.1': 'BS', '1.160.0.1': 'SB-LEE', '1.161.0.1': 'SB-HCI', '1.162.0.1': 'REF-LEE', '1.163.0.1': 'REF-HG', '1.164.0.1': 'REF-HCI', '1.165.0.1': 'REF-HPP'}
-
-linkmargin = 0.2
-sleeptype = sys.argv[1]
+start_proc = time.time()
 timestep = 0
-hysterisis = 0
-if len(sys.argv) >= 3:
-    experiment = sys.argv[2]
-    if experiment == "1":
-        sleep_edges = [sleep_edges[0]]
-    elif experiment == "2":
-        sleep_edges = sleep_edges[0:2]
-    elif experiment == "all":
-        sleep_edges = sleep_edges
 
-if len(sys.argv) >= 4:
-    hysterisis = int(sys.argv[3])
+argparse = argparse.ArgumentParser()
+argparse.add_argument("--topo", default="mini-internet", help="topology to use")
+argparse.add_argument("--mode", default="smart", help="controller mode")
+argparse.add_argument("--sleeptype", default="sleep", help="sleep type")
+argparse.add_argument("--no_edges", default="all", help="number of sleep edges")
+argparse.add_argument("--hyst", type=int, default=0 , help="hysterisis time")
+argparse.add_argument("--linkmargin", type=float, default=0.2, help="link margin")
+argparse.add_argument("--interval", type=int, default=1, help="controller interval")
+argparse.add_argument("--wait_time", type=int, default=5, help="wait time before controller starts")
+argparse.add_argument("--wake_delay", type=int, default=10, help="delay before link is actually ready")
+argparse.add_argument("--wake_mode", default="dist", help="wake up signaling mode")
+argparse.add_argument("--dist_hyst", type=int, default=10, help="hysterisis when controller gets distributed wake all signal")
 
+args = argparse.parse_args()
 
+print(args)
+
+if args.topo == "mini-internet":
+    sleep_edges = [("1.151.0.1","1.154.0.1"), ("1.151.0.1","1.153.0.1"), ("1.151.0.1","1.152.0.1"), ("1.151.0.1","1.157.0.1"), ("1.151.0.1","1.155.0.1"), ("1.153.0.1","1.152.0.1"), ("1.152.0.1","1.155.0.1"), ("1.153.0.1","1.156.0.1"), ("1.154.0.1","1.158.0.1"), ("1.152.0.1","1.156.0.1"), ("1.154.0.1","1.157.0.1"), ("1.153.0.1","1.154.0.1")]
+    translate = {"1.151.0.1": "ZURI", "1.152.0.1": "BASE", "1.153.0.1": "GENE", "1.154.0.1": "LUGA", "1.155.0.1": "MUNI", "1.156.0.1": "LYON", "1.157.0.1": "VIEN", "1.158.0.1": "MILA"}
+        
+elif args.topo == "eth":
+    sleep_edges = [('1.151.0.1', '1.152.0.1'), ('1.153.0.1', '1.152.0.1'), ('1.153.0.1', '1.154.0.1'), ('1.162.0.1', '1.152.0.1'), ('1.154.0.1', '1.155.0.1'), ('1.155.0.1', '1.152.0.1'), ('1.155.0.1', '1.164.0.1'), ('1.162.0.1', '1.164.0.1'), ('1.155.0.1', '1.156.0.1'), ('1.163.0.1', '1.160.0.1'), ('1.160.0.1', '1.162.0.1'), ('1.163.0.1', '1.162.0.1'), ('1.163.0.1', '1.165.0.1'), ('1.164.0.1', '1.161.0.1'), ('1.165.0.1', '1.161.0.1'), ('1.165.0.1', '1.164.0.1'), ('1.160.0.1', '1.161.0.1'), ('1.151.0.1', '1.157.0.1'), ('1.151.0.1', '1.158.0.1'), ('1.151.0.1', '1.159.0.1'), ('1.151.0.1', '1.160.0.1'), ('1.151.0.1', '1.161.0.1'), ('1.156.0.1', '1.160.0.1'), ('1.156.0.1', '1.161.0.1'), ('1.156.0.1', '1.157.0.1'), ('1.156.0.1', '1.158.0.1'), ('1.156.0.1', '1.159.0.1')]
+    translate = {'1.151.0.1': 'BGW-LEE', '1.152.0.1': 'FW-LEE', '1.153.0.1': 'GW-LEE', '1.154.0.1': 'GW-HCI', '1.155.0.1': 'FW-HCI', '1.156.0.1': 'BGW-HCI', '1.157.0.1': 'OCT', '1.158.0.1': 'OX', '1.159.0.1': 'BS', '1.160.0.1': 'SB-LEE', '1.161.0.1': 'SB-HCI', '1.162.0.1': 'REF-LEE', '1.163.0.1': 'REF-HG', '1.164.0.1': 'REF-HCI', '1.165.0.1': 'REF-HPP'}
+
+mode = args.mode
+sleeptype = args.sleeptype
+
+if args.no_edges == "1":
+    sleep_edges = [sleep_edges[0]]
+elif args.no_edges == "2":
+    sleep_edges = sleep_edges[0:2]
+elif args.no_edges == "all":
+    sleep_edges = sleep_edges
+
+hysterisis = args.hyst
+linkmargin = args.linkmargin
+interval = args.interval
+wait_time = args.wait_time
+wake_delay = args.wake_delay
+
+nodes = list(translate.keys())
 last_sleep_edge_bws = [None] * len(sleep_edges)
 
 
@@ -43,11 +62,15 @@ def main():
     s.bind(('', 2024))
     s.listen(5)
     s.settimeout(0.1)
-    
+    print(f"start took: {time.time() - start_proc}")
 
-    for i in range(120):
+    time.sleep(wait_time)
+
+    for i in range(0, 120, interval):
+
         start = time.time()
-        timestep = i
+        timestep = i+wait_time
+
         if counter == 0:
             traffic_step()
         else:
@@ -58,12 +81,13 @@ def main():
             while True:
                 con, addr = s.accept()
                 print(f"Connection from {addr} {i}")
+                print(f"time of congestion: {time.time()}")
                 print(con.recv(1024).decode())
                 counter = 10
                 for node in nodes: 
                     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                     s.connect((node, 2023))
-                    s.sendall(f"wake all".encode())
+                    s.sendall(f"wake all {wake_delay}".encode())
                     s.close()
                 for edge in topo.edges():
                     topo[edge[0]][edge[1]]["sleep"] = False
@@ -72,21 +96,30 @@ def main():
             print("no connection")
 
         end = time.time()
-        if (end - start) > 1:
+        if (end - start) > interval:
             print(f"Warning: timestep {i} took {end - start} seconds")
 
-        time.sleep(max(0, 1 - (end - start)))
+        time.sleep(max(0, interval - (end - start)))
 
     print("wake all")
     for node in nodes: 
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         s.connect((node, 2023))
-        s.sendall(f"wake all".encode())
+        s.sendall(f"wake all 0".encode())
         s.close()
 
     time.sleep(10)
+
+    calculate_sleeptime()
+    
+    return
+
+
+def calculate_sleeptime():
+    global translate, topo
     sleeptime = []
     start = {}
+
     for edge in topo.edges():
         edge_name = f"{translate[edge[0]]} - {translate[edge[1]]}"
         topo_sleeptime = topo[edge[0]][edge[1]]["sleeptime"]
@@ -94,7 +127,7 @@ def main():
         if len(topo_sleeptime) > 1:
             start_element = topo_sleeptime[0]
             for i in range(len(topo_sleeptime)-1):
-                if topo_sleeptime[i] + 1 == topo_sleeptime[i+1]:
+                if topo_sleeptime[i] + interval == topo_sleeptime[i+1]:
                     continue
                 else:
                     start[edge_name].append((start_element, topo_sleeptime[i]))
@@ -102,11 +135,13 @@ def main():
             start[edge_name].append((start_element, topo_sleeptime[-1]))
         elif len(topo_sleeptime) == 1:
             start[edge_name].append((topo_sleeptime[0], topo_sleeptime[0]))
-        sleeptime.append(len(topo_sleeptime)/120.0 * 100)
+        sleeptime.append(len(topo_sleeptime)/120.0 * interval * 100)
         print(f"{edge_name}: {sleeptime[-1]} %")
-    print(start)
 
+    print(start)
     print(f"Average Sleeptime: {sum(sleeptime)/len(sleeptime)} %")
+
+    return
 
 
 """
@@ -316,7 +351,7 @@ def send_command(command, sleep_edge, G):
     for router in sleep_edge:
             s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             s.connect((router, 2023))
-            s.sendall(f"{command} {G[sleep_edge[0]][sleep_edge[1]]['ip'][router]}".encode())
+            s.sendall(f"{command} {G[sleep_edge[0]][sleep_edge[1]]['ip'][router]} {wake_delay}".encode())
             s.close()
 
 
@@ -436,7 +471,8 @@ def traffic_step():
     edges_to_sleep = get_links_to_sleep(sleep_edges, G)
     edges_to_wake = get_links_to_wake(sleep_edges, G)
 
-    edges_to_sleep = optimize_link_sleep(edges_to_sleep, G) 
+    if mode == "smart":
+        edges_to_sleep = optimize_link_sleep(edges_to_sleep, G) 
 
     command_list = check_link_state(edges_to_sleep, edges_to_wake, G)
 
