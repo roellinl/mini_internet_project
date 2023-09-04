@@ -5,6 +5,9 @@ import socket
 import argparse
 from multiprocessing import Process
 
+
+# Parse the arguments and set variables for the controller
+
 start_proc = time.time()
 timestep = 0
 
@@ -48,24 +51,31 @@ linkmargin = args.linkmargin
 interval = args.interval
 wait_time = args.wait_time
 wake_delay = args.wake_delay
+dist_hyst = args.dist_hyst
 
 nodes = list(translate.keys())
 last_sleep_edge_bws = [None] * len(sleep_edges)
 
 
+# main function that is called when the controller is started
 def main():
     global topo, timestep
 
     topo = read_topology()
     counter = 0
-    s = socket.socket()
-    s.bind(('', 2024))
-    s.listen(5)
-    s.settimeout(0.1)
-    print(f"start took: {time.time() - start_proc}")
 
-    time.sleep(wait_time)
+    congestion_socket = socket.socket()
+    congestion_socket.bind(('', 2024))
+    congestion_socket.listen(5)
+    congestion_socket.settimeout(0.1)
 
+    start_time = time.time() - start_proc
+
+    print(f"start took: {start_time}")
+
+    time.sleep(max(0,wait_time-start_time))
+
+    # main control loop
     for i in range(0, 120, interval):
 
         start = time.time()
@@ -77,30 +87,18 @@ def main():
             counter -= 1
             print(counter)
 
-        try:
-            while True:
-                con, addr = s.accept()
-                print(f"Connection from {addr} {i}")
-                print(f"time of congestion: {time.time()}")
-                print(con.recv(1024).decode())
-                counter = 10
-                for node in nodes: 
-                    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                    s.connect((node, 2023))
-                    s.sendall(f"wake all {wake_delay}".encode())
-                    s.close()
-                for edge in topo.edges():
-                    topo[edge[0]][edge[1]]["sleep"] = False
-                    
-        except:
-            print("no connection")
+        new_counter = check_congestion(congestion_socket, dist_hyst)
 
+        if new_counter > counter:
+            counter = new_counter
+            
         end = time.time()
         if (end - start) > interval:
             print(f"Warning: timestep {i} took {end - start} seconds")
 
         time.sleep(max(0, interval - (end - start)))
 
+    # wake network up again
     print("wake all")
     for node in nodes: 
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -115,12 +113,41 @@ def main():
     return
 
 
+# check if congestion signal is received
+def check_congestion(sock, dist_hyst):
+    wake_all = True
+    counter = 0
+    try:
+        while True:
+            con, addr = sock.accept()
+            print(f"Connection from {addr}")
+            print(f"time of congestion: {time.time()}")
+            print(con.recv(1024).decode())
+            counter = dist_hyst
+            if wake_all:
+                for node in nodes: 
+                    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                    s.connect((node, 2023))
+                    s.sendall(f"wake all {wake_delay}".encode())
+                    s.close()
+                for edge in topo.edges():
+                    topo[edge[0]][edge[1]]["sleep"] = False
+                wake_all = False
+                    
+    except:
+        print("no connection")
+    
+    return counter
+
+
+# calculate the sleeptime of the links
 def calculate_sleeptime():
     global translate, topo
     sleeptime = []
     start = {}
 
     for edge in topo.edges():
+        edge = sorted(edge)
         edge_name = f"{translate[edge[0]]} - {translate[edge[1]]}"
         topo_sleeptime = topo[edge[0]][edge[1]]["sleeptime"]
         start[edge_name] = []
@@ -144,33 +171,105 @@ def calculate_sleeptime():
     return
 
 
-"""
-Helper function to add a link to the list of edges to add to the graph
-"""
-def add_link(link, link2, edges, link_ids):
+# controller loop step
+def traffic_step():
+    global last_sleep_edge_bws, timestep
 
-    edges.append((link["router_ip"], link2["router_ip"], 
-        {"ip": {f"{link['router_ip']}": link["link_ip"], f"{link2['router_ip']}": link2["link_ip"]},
-            "avail": link['avail'],
-            "usage": link['usage'],
-            "max_bw": link['bw']}))
+    elements = read_traffic()
+
+    G = create_graph(elements)
     
-    link_ids.add(link["link_id"])
+    if len(G.edges()) == 0:
+        return
 
-    edges.append((link2["router_ip"], link["router_ip"], 
-        {"ip": {f"{link2['router_ip']}": link2["link_ip"], f"{link['router_ip']}": link["link_ip"]},
-            "avail": link2['avail'],
-            "usage": link2['usage'],
-            "max_bw": link2['bw']}))
+    for index, sleep_edge in enumerate(sleep_edges):
+        if topo[sleep_edge[0]][sleep_edge[1]]["sleep"]:
+            topo[sleep_edge[0]][sleep_edge[1]]["sleeptime"].append(timestep)
+        if sleep_edge not in G.edges():
+            G.add_edges_from([(sleep_edge[0], sleep_edge[1], last_sleep_edge_bws[index][0])])
+            G.add_edges_from([(sleep_edge[1], sleep_edge[0], last_sleep_edge_bws[index][1])])
+        else:
+            last_sleep_edge_bws[index] = (G[sleep_edge[0]][sleep_edge[1]],G[sleep_edge[1]][sleep_edge[0]])
 
-    link_ids.add(link2["link_id"])
 
-    return edges, link_ids
+    print_links(G, sleep_edges)
+    
+    edges_to_sleep = get_links_to_sleep(sleep_edges, G)
+    edges_to_wake = get_links_to_wake(sleep_edges, G)
+
+    if len(edges_to_wake) > 0:
+        print(f"time of congestion: {time.time()}")
+
+    if mode == "smart":
+        edges_to_sleep = optimize_link_sleep(edges_to_sleep, G) 
+
+    command_list = check_link_state(edges_to_sleep, edges_to_wake, G)
+
+    if len(command_list) > 0:
+        start = time.time()
+        for command in command_list:
+            command.start()
+        for command in command_list:
+            command.join()
+        end = time.time()
+        print(end - start)
+
+    return
 
 
-"""
-Creates a Graph object out of the information read out of the OSPF database
-"""
+# Reads the topology from the OSPF database
+def read_topology():
+    temp_graph = create_graph(read_traffic())
+    link_added = set()
+    graph = nx.Graph()
+    for edge in temp_graph.edges():
+        if edge in link_added:
+            continue
+        graph.add_edge(edge[0],edge[1],ip=temp_graph[edge[0]][edge[1]]["ip"], sleep=False, counter=0, sleeptime=[])
+        link_added.add((edge[1],edge[0]))
+    for edge in graph.edges():
+        print(graph[edge[0]][edge[1]])
+    return graph
+
+
+# Reads the traffic information from the OSPF database
+def read_traffic():
+    ospf = os.popen(f'echo -e "show ip ospf database opaque-area" | vtysh').read()
+    #print(ospf)
+    ospf = ospf.split("LS age")[1:]
+    elements = [None] * len(ospf)
+
+    type = 0
+    for link_no, link in enumerate(ospf):
+        for index, line in enumerate(link.split("\n")):
+            if "Opaque-Type " in line:
+                type = int(line.split()[1].strip())
+            if type != 1:
+                continue
+            if "Router-Address" in line:
+                elements[link_no] = {}
+                elements[link_no]["router_ip"] = line.split(":")[1].strip()
+            if "Link-Type" in line:
+                elements[link_no]["link_type"] = line.split(":")[1].strip()
+            if "Link-ID" in line:
+                elements[link_no]["link_id"] = line.split(":")[1].strip()
+            if "Local Interface IP Address" in line:
+                elements[link_no]["link_ip"] = link.split("\n")[index+1].split(":")[1].lstrip()
+            if "Remote Interface IP Address" in line:
+                elements[link_no]["remote_ip"] = link.split("\n")[index+1].split(":")[1].lstrip()
+            if "Utilized Bandwidth" in line:
+                elements[link_no]["usage"] = float(line.split(":")[1].strip().split()[0])
+            if "Maximum Bandwidth" in line:
+                elements[link_no]["bw"] = float(line.split(":")[1].strip().split()[0])
+
+        elements[link_no]["avail"] = max(0, elements[link_no]["bw"] - elements[link_no]["usage"])
+
+    if None in elements:
+        elements = elements[0:elements.index(None)]
+    return elements
+
+
+# Creates a Graph object out of the information read out of the OSPF database
 def create_graph(elements):
 
     nodes = set([i["router_ip"] for i in elements])
@@ -202,45 +301,29 @@ def create_graph(elements):
     return G
 
 
-"""
-Prints the links and traffic amounts of the graph and marks the monitored links
-"""
-def print_links(G, sleep_edges):
-    global translate
+# Helper function to add a link to the list of edges to add to the graph
+def add_link(link, link2, edges, link_ids):
 
-    already_printed = set()
-    print_string = ""
-    monitored_string = "Monitored: \n"
-
-    for edge in G.edges():
+    edges.append((link["router_ip"], link2["router_ip"], 
+        {"ip": {f"{link['router_ip']}": link["link_ip"], f"{link2['router_ip']}": link2["link_ip"]},
+            "avail": link['avail'],
+            "usage": link['usage'],
+            "max_bw": link['bw']}))
     
-        if edge in already_printed:
-            continue
-        
-        already_printed.add(edge[::-1])
-        links = [edge, edge[::-1]]
-        if edge in sleep_edges or edge[::-1] in sleep_edges:
-            for link in links:
-                ips = link
-                link_info = G[link[0]][link[1]]
-                max_bw = link_info["max_bw"]
-                monitored_string += f"{translate[ips[0]]} - {translate[ips[1]]}: Avail: {round(link_info['avail']*100/max_bw)}, Usage: {round(link_info['usage']*100/max_bw)} \t"
-            monitored_string += "\n"
-        else:
-            for link in links:
-                ips = link
-                link_info = G[link[0]][link[1]]
-                max_bw = link_info["max_bw"]
-                print_string += f"{translate[ips[0]]} - {translate[ips[1]]}: Avail: {round(link_info['avail']*100/max_bw)}, Usage: {round(link_info['usage']*100/max_bw)} \t"
-            print_string += "\n"
+    link_ids.add(link["link_id"])
 
-    print(print_string)
-    print(monitored_string)
+    edges.append((link2["router_ip"], link["router_ip"], 
+        {"ip": {f"{link2['router_ip']}": link2["link_ip"], f"{link['router_ip']}": link["link_ip"]},
+            "avail": link2['avail'],
+            "usage": link2['usage'],
+            "max_bw": link2['bw']}))
+
+    link_ids.add(link2["link_id"])
+
+    return edges, link_ids
 
 
-"""
-Decide which links can be put to sleep
-"""
+# Decide which links can be put to sleep
 def get_links_to_sleep(sleep_edges, G):
     global linkmargin
 
@@ -269,9 +352,7 @@ def get_links_to_sleep(sleep_edges, G):
     return edges_to_sleep
 
 
-"""
-Decide which links need to wake up
-"""
+# Decide which links need to wake up
 def get_links_to_wake(sleep_edges, G):
     global linkmargin
 
@@ -285,9 +366,25 @@ def get_links_to_wake(sleep_edges, G):
     return edges_to_wake
 
 
-""" 
-check if link state needs to be changed and if it will remain connected after the change 
-"""
+# orders links by utilization and removes loaded links from the list
+def optimize_link_sleep(edges_to_sleep, G):
+    score = [None] * len(edges_to_sleep)
+    for index, edge in enumerate(edges_to_sleep):
+        score1 = G[edge[0]][edge[1]]["avail"] / G[edge[0]][edge[1]]["max_bw"]
+        score2 = G[edge[1]][edge[0]]["avail"] / G[edge[1]][edge[0]]["max_bw"]
+        score[index] = (min(score1, score2), edge)
+    
+    score.sort(reverse=True)
+    print(score)
+    opt_edges_to_sleep = []
+    for score, edge in score:
+        if score < 0.6:
+            continue
+        opt_edges_to_sleep.append(edge)
+    return opt_edges_to_sleep
+
+
+# check if link state needs to be changed and if it will remain connected after the change 
 def check_link_state(edges_to_sleep, edges_to_wake, G):
     global topo, translate, timestep, sleeptype, hysterisis
 
@@ -309,7 +406,7 @@ def check_link_state(edges_to_sleep, edges_to_wake, G):
             continue
 
         command_list.append(Process(target=send_command, args=("wake", sleep_edge, G)))
-
+        
         topo[sleep_edge[0]][sleep_edge[1]]["sleep"] = False
 
     for sleep_edge in edges_to_sleep:
@@ -343,61 +440,7 @@ def check_link_state(edges_to_sleep, edges_to_wake, G):
     return command_list
 
 
-"""
-Sends the command to the router to sleep or wake up the link
-"""
-def send_command(command, sleep_edge, G):
-    
-    for router in sleep_edge:
-            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            s.connect((router, 2023))
-            s.sendall(f"{command} {G[sleep_edge[0]][sleep_edge[1]]['ip'][router]} {wake_delay}".encode())
-            s.close()
-
-
-"""
-Reads the traffic information from the OSPF database
-"""
-def read_traffic():
-    ospf = os.popen(f'echo -e "show ip ospf database opaque-area" | vtysh').read()
-    #print(ospf)
-    ospf = ospf.split("LS age")[1:]
-    elements = [None] * len(ospf)
-
-    type = 0
-    for link_no, link in enumerate(ospf):
-        for index, line in enumerate(link.split("\n")):
-            if "Opaque-Type " in line:
-                type = int(line.split()[1].strip())
-            if type != 1:
-                continue
-            if "Router-Address" in line:
-                elements[link_no] = {}
-                elements[link_no]["router_ip"] = line.split(":")[1].strip()
-            if "Link-Type" in line:
-                elements[link_no]["link_type"] = line.split(":")[1].strip()
-            if "Link-ID" in line:
-                elements[link_no]["link_id"] = line.split(":")[1].strip()
-            if "Local Interface IP Address" in line:
-                elements[link_no]["link_ip"] = link.split("\n")[index+1].split(":")[1].lstrip()
-            if "Remote Interface IP Address" in line:
-                elements[link_no]["remote_ip"] = link.split("\n")[index+1].split(":")[1].lstrip()
-            if "Available Bandwidth" in line:
-                elements[link_no]["avail"] = float(line.split(":")[1].strip().split()[0])
-            if "Utilized Bandwidth" in line:
-                elements[link_no]["usage"] = float(line.split(":")[1].strip().split()[0])
-            if "Maximum Bandwidth" in line:
-                elements[link_no]["bw"] = float(line.split(":")[1].strip().split()[0])
-
-
-    if None in elements:
-        elements = elements[0:elements.index(None)]
-    return elements
-
-
-"""
-Check if the network is still connected after setting the link to sleep
-"""
+# Check if the network is still connected after setting the link to sleep
 def check_connectedness(sleep_edge):
     global topo
     H=topo.copy()
@@ -409,86 +452,50 @@ def check_connectedness(sleep_edge):
     return nx.is_connected(H)
 
 
-"""
-Reads the topology from the OSPF database
-"""
-def read_topology():
-    temp_graph = create_graph(read_traffic())
-    link_added = set()
-    graph = nx.Graph()
-    for edge in temp_graph.edges():
-        if edge in link_added:
+# Sends the command to the router to sleep or wake up the link
+def send_command(command, sleep_edge, G):
+    
+    for router in sleep_edge:
+            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            s.connect((router, 2023))
+            s.sendall(f"{command} {G[sleep_edge[0]][sleep_edge[1]]['ip'][router]} {wake_delay}".encode())
+            s.close()
+
+
+# Prints the links and traffic amounts of the graph and marks the monitored links
+def print_links(G, sleep_edges):
+    global translate
+
+    already_printed = set()
+    print_string = ""
+    monitored_string = "Monitored: \n"
+
+    for edge in G.edges():
+    
+        if edge in already_printed:
             continue
-        graph.add_edge(edge[0],edge[1],ip=temp_graph[edge[0]][edge[1]]["ip"], sleep=False, counter=0, sleeptime=[])
-        link_added.add((edge[1],edge[0]))
-    for edge in graph.edges():
-        print(graph[edge[0]][edge[1]])
-    return graph
-
-
-def optimize_link_sleep(edges_to_sleep, G):
-    score = [None] * len(edges_to_sleep)
-    for index, edge in enumerate(edges_to_sleep):
-        score1 = G[edge[0]][edge[1]]["avail"] / G[edge[0]][edge[1]]["max_bw"]
-        score2 = G[edge[1]][edge[0]]["avail"] / G[edge[1]][edge[0]]["max_bw"]
-        score[index] = (min(score1, score2), edge)
-    
-    score.sort(reverse=True)
-    print(score)
-    opt_edges_to_sleep = []
-    for score, edge in score:
-        if score < 0.6:
-            continue
-        opt_edges_to_sleep.append(edge)
-    return opt_edges_to_sleep
-
-    
-"""
-Main function that is called every second
-"""
-def traffic_step():
-    global last_sleep_edge_bws, timestep
-
-    elements = read_traffic()
-
-    G = create_graph(elements)
-    
-    if len(G.edges()) == 0:
-        return
-
-    for index, sleep_edge in enumerate(sleep_edges):
-        if topo[sleep_edge[0]][sleep_edge[1]]["sleep"]:
-            topo[sleep_edge[0]][sleep_edge[1]]["sleeptime"].append(timestep)
-        if sleep_edge not in G.edges():
-            G.add_edges_from([(sleep_edge[0], sleep_edge[1], last_sleep_edge_bws[index][0])])
-            G.add_edges_from([(sleep_edge[1], sleep_edge[0], last_sleep_edge_bws[index][1])])
+        
+        already_printed.add(edge[::-1])
+        links = [edge, edge[::-1]]
+        if edge in sleep_edges or edge[::-1] in sleep_edges:
+            for link in links:
+                ips = link
+                link_info = G[link[0]][link[1]]
+                max_bw = link_info["max_bw"]
+                monitored_string += f"{translate[ips[0]]} - {translate[ips[1]]}: Avail: {round(link_info['avail']*100/max_bw)}, Usage: {round(link_info['usage']*100/max_bw)} \t"
+            monitored_string += "\n"
         else:
-            last_sleep_edge_bws[index] = (G[sleep_edge[0]][sleep_edge[1]],G[sleep_edge[1]][sleep_edge[0]])
+            for link in links:
+                ips = link
+                link_info = G[link[0]][link[1]]
+                max_bw = link_info["max_bw"]
+                print_string += f"{translate[ips[0]]} - {translate[ips[1]]}: Avail: {round(link_info['avail']*100/max_bw)}, Usage: {round(link_info['usage']*100/max_bw)} \t"
+            print_string += "\n"
 
-
-    print_links(G, sleep_edges)
-    
-    edges_to_sleep = get_links_to_sleep(sleep_edges, G)
-    edges_to_wake = get_links_to_wake(sleep_edges, G)
-
-    if mode == "smart":
-        edges_to_sleep = optimize_link_sleep(edges_to_sleep, G) 
-
-    command_list = check_link_state(edges_to_sleep, edges_to_wake, G)
-
-    if len(command_list) > 0:
-        start = time.time()
-        for command in command_list:
-            command.start()
-        for command in command_list:
-            command.join()
-        end = time.time()
-        print(end - start)
-
-    return
+    print(print_string)
+    print(monitored_string)
 
 
 if __name__ == "__main__":
     
     main()
-    

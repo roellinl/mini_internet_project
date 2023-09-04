@@ -114,7 +114,8 @@ async def sleep(ts, command, intf):
             cost_string = cost_string[cost_string.index("{"):cost_string.rindex("}")+2]
             cost = json.loads(cost_string)["interfaces"][intf]["cost"]
             print(f"cost: {cost} intf", flush=True)
-            last_ospf_cost[intf] = cost
+            if cost != 65535:
+                last_ospf_cost[intf] = cost
             output = vtysh_command(f"conf t \n interface {intf} \n ip ospf cost 65535 \n exit \n exit \n exit \n")
         else:
             print(f"skipped cost because of newer command {in_progress[intf][0]},flush=True")
@@ -137,7 +138,7 @@ async def wake(ts, intf, delay):
         if intf not in last_ospf_cost.keys():
             last_ospf_cost[intf] = 1
         output = vtysh_command(f"conf t \n interface {intf} \n ip ospf cost {last_ospf_cost[intf]} \n no shutdown \n exit \n exit \n exit \n")
-        output += vtysh_command(f"conf t \n router ospf \n no mpls-te on \n mpls-te on \n exit \n exit \n exit \n")
+        # output += vtysh_command(f"conf t \n router ospf \n no mpls-te on \n mpls-te on \n exit \n exit \n exit \n")
     return
 
 
