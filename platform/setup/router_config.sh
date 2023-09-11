@@ -93,7 +93,9 @@ for ((k=0;k<group_numbers;k++));do
                     echo " -c 'ip address "$(subnet_host_router "${group_number}" "${i}" "router")"' \\"
                     echo " -c 'exit' \\"
                     echo " -c 'router ospf' \\"
+
                     echo " -c 'network "$(subnet_host_router "${group_number}" "${i}" "router")" area 0' \\"
+                    echo " -c 'maximum-paths 1' \\"
                     echo " -c 'exit' \\"
                 fi
 
@@ -112,12 +114,12 @@ for ((k=0;k<group_numbers;k++));do
 		#echo " -c 'exit' \\"
                 echo " -c 'router ospf' \\"
 		echo " -c 'timers throttle spf 10 10 100' \\"
-		echo " -c 'timers throttle lsa all 10' \\"
+		echo " -c 'timers throttle lsa all 50' \\"
 		echo " -c 'timers lsa min-arrival 10' \\"
                 echo " -c 'ospf router-id "${router_id%/*}"' \\"
 		echo " -c 'ospf opaque-lsa' \\" # enable mpls-te
-		echo " -c 'mpls-te on' \\"
-		echo " -c 'mpls-te router-address "${router_id%/*}"' \\" #end
+		#echo " -c 'mpls-te on' \\"
+		#echo " -c 'mpls-te router-address "${router_id%/*}"' \\" #end
 		#echo " -c 'segment-routing on' \\"
                 #echo " -c 'segment-routing prefix "$(subnet_router "${group_number}" "${i}")" index 0' \\"
                 echo " -c 'network "$(subnet_router "${group_number}" "${i}")" area 0' \\"
@@ -161,10 +163,10 @@ for ((k=0;k<group_numbers;k++));do
                 echo " -c 'ip address "$(subnet_router_router_intern "${group_number}" "${i}" 1)"' \\"
                 echo " -c 'ip ospf cost 1' \\"
 		echo " -c 'ip ospf network point-to-point' \\" # have point-to-point link
-		echo " -c 'ip ospf dead-interval minimal hello-multiplier 10' \\"
 		echo " -c 'ip ospf hello-interval 1' \\"
+        echo " -c 'ip ospf dead-interval minimal hello-multiplier 10' \\"  # 
 		echo " -c 'ip ospf retransmit-interval 1' \\"
-		echo " -c 'link-params' \\" # more to enable mpls-te
+	    echo " -c 'link-params' \\" # more to enable mpls-te
                 echo " -c 'enable' \\"
                 echo " -c 'max-rsv-bw 0' \\"
 		echo " -c 'unrsv-bw 0 0' \\"
@@ -193,8 +195,8 @@ for ((k=0;k<group_numbers;k++));do
                 echo " -c 'ip address "$(subnet_router_router_intern "${group_number}" "${i}" 2)"' \\"
                 echo " -c 'ip ospf cost 1' \\"
 		echo " -c 'ip ospf network point-to-point' \\" # have point-to-point link
-		echo " -c 'ip ospf dead-interval minimal hello-multiplier 10' \\"
 		echo " -c 'ip ospf hello-interval 1' \\"
+        echo " -c 'ip ospf dead-interval minimal hello-multiplier 10' \\" # minimal hello-multiplier 10
                 echo " -c 'ip ospf retransmit-interval 1' \\"
 		echo " -c 'link-params' \\" # more to enable mpls-te
                 echo " -c 'enable' \\"

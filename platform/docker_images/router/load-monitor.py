@@ -4,6 +4,12 @@ import time
 import sys
 import socket
 from multiprocessing import Process
+import struct
+from scapy.all import Ether, IP, sendp, wrpcap, conf, send
+from scapy.contrib.ospf import OSPF_Hdr, OSPF_LSUpd, OSPF_Area_Scope_Opaque_LSA, LLS_Generic_TLV
+from ipaddress import IPv4Address
+from multiprocessing import Process, Queue
+seq = 2147483649
 
 topology = "mini-internet"
 
@@ -19,9 +25,18 @@ nodes = list(translate.keys())
 timestep = 10
 internal = 1
 counter = 0
-if len(sys.argv) == 2:
+hysteresis = 5
+hyst_counter = 0
+type = "scapy"
+if len(sys.argv) >= 2:
     timestep = float(sys.argv[1])
-
+if len(sys.argv) >= 3:
+    delay = float(sys.argv[2])
+if len(sys.argv) >= 4:
+    type = sys.argv[3]
+if len(sys.argv) >= 5:
+    hysteresis = int(sys.argv[4])
+print(f"parameters: timestep: {timestep}, delay: {delay}, type: {type}, hysteresis: {hysteresis}")
 
 # sends command to node
 def send_command(ip, port, command):
@@ -34,18 +49,114 @@ def send_command(ip, port, command):
 
 # wakes up all nodes and informs controller
 def wake_up_network():
+    global delay
     print("wake all")
     print(f"time of congestion: {time.time()}")
     for node in nodes:
-        Process(target=send_command, args=(node, 2023, "wake all")).start()
+        Process(target=send_command, args=(node, 2023, f"wake all {delay}")).start()
     Process(target=send_command, args=(controller_ip, 2024, "wake all")).start()
     return
 
 
+def create_te_metric(adv_r,local_ip,neigh_r,remote_ip,id,bandwidth,max_bandwidth,seq):
+    router = LLS_Generic_TLV(type=1,len=4,val=adv_r.packed).build()
+    link_val=1
+    link_type_tlv = LLS_Generic_TLV(type=1,len=1,val=link_val.to_bytes(1,byteorder='big')).build()
+    link_id_tlv = LLS_Generic_TLV(type=2,len=4,val=neigh_r.packed).build()
+    local_ip_tlv = LLS_Generic_TLV(type=3,len=4,val=local_ip.packed).build()
+    remote_ip_tlv = LLS_Generic_TLV(type=4,len=4,val=remote_ip.packed).build()
+    max_bw_tlv = LLS_Generic_TLV(type=6,len=4,val=bytearray(struct.pack("!f", float(max_bandwidth)))).build()
+    avail_tlv = LLS_Generic_TLV(type=33,len=4,val=bytearray(struct.pack("!f", float(bandwidth)))).build()
+    
+
+    link_data = link_type_tlv + b"\x00\x00\x00" + link_id_tlv + local_ip_tlv + remote_ip_tlv + avail_tlv  + max_bw_tlv
+
+    link = LLS_Generic_TLV(type=2,val=link_data).build()
+
+    data = router + link
+    lsa = OSPF_Area_Scope_Opaque_LSA(id=id,adrouter=adv_r,age=1,options=0x42,seq=seq,data=data)
+
+    return (lsa, adv_r)
+
+
+def create_packet(link, bw, max_bw):
+    global seq
+    adv_r = IPv4Address(link[0][0])
+    local_ip = IPv4Address(link[1][0])
+    neigh_r= IPv4Address(link[0][1])
+    remote_ip = IPv4Address(link[1][1])
+    id_no = link[1][0].split(".")[2]
+    id = f"1.0.0.{id_no}"
+    seq += 1
+    lsa = create_te_metric(adv_r,local_ip,neigh_r,remote_ip,id,int(bw),int(max_bw),seq)
+    return lsa
+
+def send_update(packet, iface):
+    send(packet, iface=iface)
+
+def send_ospf(port_dict, packets):
+    for iface in port_dict.keys():
+        dst_ip = port_dict[iface][1][1]
+        print(dst_ip)
+        lsa_list = []
+        adv_r = packets[0][1]
+        for packet in packets:
+            lsa_list.append(packet[0])
+        packet = OSPF_Hdr(type=4,src=adv_r)/OSPF_LSUpd(lsacount=len(lsa_list), lsalist=lsa_list)
+        complete_packet = IP(src=str(port_dict[iface][1][0]), dst=str(dst_ip), tos=192)/packet[0]
+        Process(target=send_update, args=(complete_packet,iface)).start()
+    return
+
+
+def read_network():
+    ip_to_intf = {}
+    link_ip = os.popen(f'echo -e "show interface brief \n exit \n" | vtysh').read()
+    for interface in link_ip.split("\n")[7:-3]:
+        if len(interface.split()) < 4:
+            continue
+        if "port_" in interface.split()[0]:
+            linkid = interface.split()[3].split("/")[0]
+            ip_to_intf[linkid] = interface.split()[0]
+    print(ip_to_intf,flush=True)
+    id_string = os.popen(f'echo -e "show ip ospf" | vtysh').read().split("\n")
+    for line in id_string:
+        if "OSPF Routing Process, Router ID" in line:
+            id = line.split(":")[1].strip()
+    nodes = os.popen(f'echo -e "show ip ospf database router" | vtysh').read().split("LS age:")
+    router_intf = {}
+    for node in nodes[1:]:
+        router_id = node.split("\n")[5].split(":")[1].strip()
+        router_intf[router_id] = []
+        for links in node.split("Link connected to")[1:]:
+            if "another Router" in links:
+                lines = links.split("\n")
+                router_intf[router_id].append((lines[1].split(":")[1].lstrip(),lines[2].split(":")[1].lstrip()))
+    links_dict = {}
+    
+    for link in router_intf[id]:
+        for element in router_intf[link[0]]:
+            if element[0] == id:
+                other_ip = element[1]
+        links_dict[(id,link[0])] = (link[1],other_ip)
+    port_dict = {}
+    for router, link_ip in links_dict.items():
+        port_name = ip_to_intf[link_ip[0]]
+        port_dict[port_name] = (router, links_dict[router])
+    print(port_dict,flush=True)
+    return port_dict
+
+
+def update_ospf(link_use, max_bw, ports_dict):
+    packets = []
+    for intf, usage in link_use.items():
+
+        packets.append(create_packet(ports_dict[intf], usage, max_bw[intf]))
+    send_ospf(ports_dict, packets)
+
 
 def main():
-    global counter
-    
+    global counter, hyst_counter, hysteresis
+    ports_dict = read_network()
     links = os.popen("ifconfig -a | sed 's/[ :\t].*//;/^$/d'").read().split()
     config = f"conf t \n"
     tx = dict()
@@ -94,20 +205,27 @@ def main():
             if link_use[link]/max_bw[link] > 0.8:
                 print(f"utilization: {link_use[link]/max_bw[link]}")
                 print(f"link {link} is congested {time.time()}")
-                wake_up_network()
+                if hyst_counter == 0:
+                    wake_up_network()
+                    hyst_counter = hysteresis
 
             rx_old[link], tx_old[link] = rx[link], tx[link]
             if "UP" not in linkstring[0]:
                 print(f"One of the Ports is down: {linkstring[0]}",flush=True)
+
             config += f"interface {link} \n link-params \n use-bw {link_use[link]} \n exit \n exit \n"
         config+=f"exit \n exit \n"
-
+        print(config)
         if counter == timestep:
-            os.popen(f'echo -e "{config}" | vtysh').read()
+            if type == "frr":
+                os.popen(f'echo -e "{config}" | vtysh').read()
+            elif type == "scapy":
+                update_ospf(link_use, max_bw,ports_dict)
             counter = 0
         
         end = time.time()
-
+        if hyst_counter > 0:
+            hyst_counter -= 1
         if (end - start) > internal:
             print(f"Warning: timestep took {end - start} seconds")
         time.sleep(max(0, 1 - (end - start)))

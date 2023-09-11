@@ -80,7 +80,7 @@ async def wake_all(ts, delay):
     global in_progress, ip_to_intf
 
     ip_to_intf = get_ip_to_intf()
-
+    tasks = []
     for intf in ip_to_intf.values():
         if intf in in_progress and in_progress[intf][1] == "wake":
             print(f"skipped because of same command {in_progress[intf][1]}")
@@ -88,12 +88,14 @@ async def wake_all(ts, delay):
         in_progress[intf] = (ts, "wake")
         print(f"wake all {intf}",flush=True)
         print(f"in progress: {in_progress}",flush=True)
-    
-    print(f"Add artificial delay of {delay} seconds before wakeup", flush=True)
-    await asyncio.sleep(delay)
 
-    for intf in ip_to_intf.values():
-        await wake(ts, intf, 0)
+        tasks.append(asyncio.create_task(wake(ts, intf, delay)))
+    #print(f"Add artificial delay of {delay} seconds before wakeup", flush=True)
+    for task in tasks:
+        await task
+
+    #for intf in ip_to_intf.values():
+    #    await wake(ts, intf, 0)
     return
 
 
@@ -122,7 +124,7 @@ async def sleep(ts, command, intf):
         await asyncio.sleep(1)
 
     if in_progress[intf][0] == ts:
-        output = vtysh_command(f"conf t \n interface {intf} \n link-params \n ava-bw {max_bw} \n use-bw 0 \n exit \n shutdown \n exit \n exit \n exit \n")
+        output = vtysh_command(f"conf t \n interface {intf} \n shutdown \n exit \n exit \n exit \n")
     else:
         print(f"skipped because of newer command {in_progress[intf][0]},flush=True")
 
@@ -130,15 +132,16 @@ async def sleep(ts, command, intf):
 
 
 async def wake(ts, intf, delay):
-
-    print(f"Add artificial delay of {delay} seconds before wakeup", flush=True)
-    await asyncio.sleep(delay)
+    if delay != 0:
+        print(f"Add artificial delay of {delay} seconds before wakeup", flush=True)
+        await asyncio.sleep(delay)
 
     if in_progress[intf][0] == ts:
         if intf not in last_ospf_cost.keys():
             last_ospf_cost[intf] = 1
-        output = vtysh_command(f"conf t \n interface {intf} \n ip ospf cost {last_ospf_cost[intf]} \n no shutdown \n exit \n exit \n exit \n")
-        # output += vtysh_command(f"conf t \n router ospf \n no mpls-te on \n mpls-te on \n exit \n exit \n exit \n")
+        output = vtysh_command(f"conf t \n interface {intf} \n no shutdown \n  ip ospf cost {last_ospf_cost[intf]} \n exit \n exit \n exit \n")
+        #output += vtysh_command(f"clear ip ospf interface {intf} \n exit \n")
+        #output += vtysh_command(f"conf t \n router ospf \n mpls-te on \n exit \n exit \n exit \n")
     return
 
 
@@ -150,14 +153,15 @@ def get_ip_to_intf():
     ip_to_intf = {}
     link_ip = vtysh_command(f"show interface brief \n exit \n")
 
-    print(link_ip.split("\n"))
+    #print(link_ip.split("\n"))
 
     for interface in link_ip.split("\n")[7:-3]:
-        print(interface.split())
+        #print(interface.split())
         if len(interface.split()) < 4:
             continue
-        linkid = interface.split()[3].split("/")[0]
-        ip_to_intf[linkid] = interface.split()[0]
+        if "port_" in interface.split()[0]:
+            linkid = interface.split()[3].split("/")[0]
+            ip_to_intf[linkid] = interface.split()[0]
 
     print(ip_to_intf,flush=True)
     return ip_to_intf

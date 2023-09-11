@@ -37,6 +37,7 @@ COPY controller.py /controller.py
 
 RUN apk add py3-pip
 RUN pip3 install networkx
+RUN pip3 install scapy
 RUN chmod +x /usr/local/bin/looking_glass /usr/local/bin/run_frr
 RUN chmod +x /load-monitor.py
 RUN chmod +x /sleep-script.py
