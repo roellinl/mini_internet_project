@@ -23,6 +23,7 @@ argparse.add_argument("--wait_time", type=int, default=5, help="wait time before
 argparse.add_argument("--wake_delay", type=int, default=10, help="delay before link is actually ready")
 argparse.add_argument("--wake_mode", default="dist", help="wake up signaling mode")
 argparse.add_argument("--dist_hyst", type=int, default=10, help="hysterisis when controller gets distributed wake all signal")
+argparse.add_argument("--max_util", type=float, default=0.4, help="maximum utilization to shut down a link")
 
 args = argparse.parse_args()
 
@@ -52,6 +53,7 @@ interval = args.interval
 wait_time = args.wait_time
 wake_delay = args.wake_delay
 dist_hyst = args.dist_hyst
+max_util = args.max_util
 
 nodes = list(translate.keys())
 last_sleep_edge_bws = [None] * len(sleep_edges)
@@ -368,6 +370,7 @@ def get_links_to_wake(sleep_edges, G):
 
 # orders links by utilization and removes loaded links from the list
 def optimize_link_sleep(edges_to_sleep, G):
+    global max_util
     score = [None] * len(edges_to_sleep)
     for index, edge in enumerate(edges_to_sleep):
         score1 = G[edge[0]][edge[1]]["avail"] / G[edge[0]][edge[1]]["max_bw"]
@@ -378,7 +381,7 @@ def optimize_link_sleep(edges_to_sleep, G):
     print(score)
     opt_edges_to_sleep = []
     for score, edge in score:
-        if score < 0.6:
+        if score < (1-max_util):
             continue
         opt_edges_to_sleep.append(edge)
     return opt_edges_to_sleep
