@@ -28,6 +28,7 @@ counter = 0
 hysteresis = 5
 hyst_counter = 0
 type = "scapy"
+linkmargin = 0.2
 if len(sys.argv) >= 2:
     timestep = float(sys.argv[1])
 if len(sys.argv) >= 3:
@@ -36,6 +37,8 @@ if len(sys.argv) >= 4:
     type = sys.argv[3]
 if len(sys.argv) >= 5:
     hysteresis = int(sys.argv[4])
+if len(sys.argv) >= 6:
+    linkmargin = float(sys.argv[5])
 print(f"parameters: timestep: {timestep}, delay: {delay}, type: {type}, hysteresis: {hysteresis}")
 
 # sends command to node
@@ -202,7 +205,7 @@ def main():
             tx[link] = float(linkstring[7].lstrip().split()[0])
             link_use[link] = min(max_bw[link],round(link_use[link]*0.2 + 0.8*round((tx[link]-tx_old[link])/timeframe)))
 
-            if link_use[link]/max_bw[link] > 0.8:
+            if link_use[link]/max_bw[link] > (1-linkmargin):
                 print(f"utilization: {link_use[link]/max_bw[link]}")
                 print(f"link {link} is congested {time.time()}")
                 if hyst_counter == 0:

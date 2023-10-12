@@ -1,6 +1,6 @@
 FROM d_base_supervisor:latest
 
-RUN apk add --no-cache -X http://dl-cdn.alpinelinux.org/alpine/edge/community frr=9.0-r1
+RUN apk add --no-cache -X http://dl-cdn.alpinelinux.org/alpine/edge/community frr=9.0.1-r0
 
 RUN apk add --no-cache openssh-server openssh-client frr frr-rpki frr-pythontools \
     && ssh-keygen -A \

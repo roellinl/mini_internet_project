@@ -140,6 +140,7 @@ async def wake(ts, intf, delay):
         if intf not in last_ospf_cost.keys():
             last_ospf_cost[intf] = 1
         output = vtysh_command(f"conf t \n interface {intf} \n no shutdown \n  ip ospf cost {last_ospf_cost[intf]} \n exit \n exit \n exit \n")
+        print(f"wake up {intf} time: {time.time()-ts}",flush=True)
         #output += vtysh_command(f"clear ip ospf interface {intf} \n exit \n")
         #output += vtysh_command(f"conf t \n router ospf \n mpls-te on \n exit \n exit \n exit \n")
     return
